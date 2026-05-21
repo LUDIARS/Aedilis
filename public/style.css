@@ -101,3 +101,78 @@ button[type="submit"]:hover { filter: brightness(1.08); }
 }
 
 .empty { color: var(--muted); font-size: 0.9rem; padding: 0.4rem 0; }
+
+.facility-info {
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+.facility-info:empty { display: none; }
+.facility-info .tag {
+  display: inline-block;
+  margin: 0.1rem 0.2rem 0.1rem 0;
+  padding: 0.05rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.9rem;
+  margin-bottom: 0.7rem;
+  flex-wrap: wrap;
+}
+.filter-bar label { font-size: 0.8rem; }
+.filter-bar label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+}
+.filter-bar select { min-width: 140px; }
+
+.card-actions { display: flex; gap: 0.35rem; }
+.edit-btn {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.edit-form .row { display: flex; gap: 0.5rem; }
+
+.badge {
+  font-size: 0.65rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 5px;
+  padding: 0.1rem 0.4rem;
+  vertical-align: middle;
+}
+.hint { font-size: 0.78rem; color: var(--muted); margin: 0 0 0.6rem; }
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.2rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.admin-row:last-child { border-bottom: none; }
+.admin-row .name { flex: 1; }
+.toggle { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); }

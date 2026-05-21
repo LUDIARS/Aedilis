@@ -63,8 +63,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  updateReservation: (
+    id: string,
+    body: { startAt?: string; endAt?: string; purpose?: string },
+  ) =>
+    req<{ reservation: Reservation }>(`/api/reservations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   cancelReservation: (id: string) =>
     req<{ reservation: Reservation }>(`/api/reservations/${id}`, {
       method: 'DELETE',
+    }),
+  setOverlap: (facilityId: string, allowOverlap: boolean) =>
+    req<{ facility: Facility }>(`/api/facilities/${facilityId}/overlap`, {
+      method: 'POST',
+      body: JSON.stringify({ allowOverlap }),
     }),
 };

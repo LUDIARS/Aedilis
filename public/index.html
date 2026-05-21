@@ -21,6 +21,7 @@
         <label>施設
           <select id="f-facility" required></select>
         </label>
+        <div id="facility-info" class="facility-info"></div>
         <label>開始
           <input id="f-start" type="datetime-local" required />
         </label>
@@ -37,7 +38,22 @@
 
     <section class="panel">
       <h2>予約一覧</h2>
+      <div class="filter-bar">
+        <label>施設
+          <select id="filter-facility"></select>
+        </label>
+        <label class="checkbox">
+          <input id="filter-mine" type="checkbox" />
+          自分の予約のみ
+        </label>
+      </div>
       <div id="reservations"></div>
+    </section>
+
+    <section class="panel" id="admin-panel" hidden>
+      <h2>施設管理 <span class="badge">admin</span></h2>
+      <p class="hint">重複可: ON にした施設は同一時間帯の重複予約を許可します。</p>
+      <div id="admin-facilities"></div>
     </section>
   </main>
 
