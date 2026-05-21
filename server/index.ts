@@ -20,6 +20,7 @@ import { LocalFacilitySource } from './facility/local.ts';
 import { makeMeRouter } from './routes/me.ts';
 import { makeFacilityRouter } from './routes/facilities.ts';
 import { makeReservationRouter } from './routes/reservations.ts';
+import { corpusManifest, CORPUS_MANIFEST_PATH } from './corpus.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -81,6 +82,10 @@ app.use(
 app.get('/api/health', (c) =>
   c.json({ ok: true, service: 'aedilis', port: PORT }),
 );
+
+// Corpus hub 連携 — サービスマニフェスト (認証不要)。 Corpus が読み、
+// declarative panel の descriptor を内蔵レンダラで描画する。
+app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
