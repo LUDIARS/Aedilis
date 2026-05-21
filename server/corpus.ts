@@ -31,6 +31,10 @@ interface ActionDescriptor {
   confirm?: string;
   success?: string;
   requires?: 'admin';
+  /** 'toggle' で on/off スイッチ。 既定は単発。 */
+  kind?: 'toggle';
+  /** kind='toggle' のとき現在値の束縛 (boolean)。 */
+  state?: string;
 }
 
 interface FormField {
@@ -45,6 +49,8 @@ interface FormField {
   optionsPath?: string;
   optionLabel?: string;
   optionValue?: string;
+  /** 選択中オプションのレコードから表示する詳細フィールド。 */
+  optionDetail?: { label: string; value: string }[];
 }
 
 interface FormComponent {
@@ -65,6 +71,14 @@ interface ListComponent {
     body?: string;
     meta?: string;
     actions?: ActionDescriptor[];
+    /** item の値で pre-fill したフォームに切り替えて PATCH する。 */
+    edit?: {
+      dataId: string;
+      method: 'PATCH';
+      params?: Record<string, string>;
+      success?: string;
+      fields: FormField[];
+    };
   };
 }
 
@@ -131,6 +145,10 @@ const reservationPanel: PanelDescriptor = {
               optionsPath: 'items',
               optionLabel: 'name',
               optionValue: 'id',
+              optionDetail: [
+                { label: '場所', value: '{location}' },
+                { label: '定員', value: '{capacity}' },
+              ],
             },
             { name: 'startAt', label: '開始', input: 'datetime', required: true },
             { name: 'endAt', label: '終了', input: 'datetime', required: true },
@@ -163,6 +181,17 @@ const reservationPanel: PanelDescriptor = {
                 success: 'キャンセルしました',
               },
             ],
+            edit: {
+              dataId: 'reservation',
+              method: 'PATCH',
+              params: { id: '{id}' },
+              success: '更新しました',
+              fields: [
+                { name: 'startAt', label: '開始', input: 'datetime', required: true },
+                { name: 'endAt', label: '終了', input: 'datetime', required: true },
+                { name: 'purpose', label: '目的', input: 'text', maxLength: 200 },
+              ],
+            },
           },
         },
       ],
@@ -178,6 +207,18 @@ const reservationPanel: PanelDescriptor = {
             { header: '施設', value: '{name}' },
             { header: '場所', value: '{location}' },
             { header: '定員', value: '{capacity}' },
+          ],
+          rowActions: [
+            {
+              label: '重複可',
+              kind: 'toggle',
+              state: '{allowOverlap}',
+              dataId: 'facility-overlap',
+              method: 'POST',
+              params: { id: '{id}' },
+              body: { allowOverlap: '{toggled}' },
+              requires: 'admin',
+            },
           ],
         },
       ],
@@ -205,6 +246,12 @@ export const corpusManifest: CorpusServiceManifest = {
       path: '/api/reservations/:id',
       scope: 'local',
       title: '予約 (個別)',
+    },
+    {
+      id: 'facility-overlap',
+      path: '/api/facilities/:id/overlap',
+      scope: 'local',
+      title: '施設 重複可設定',
     },
   ],
   panels: [
