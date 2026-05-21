@@ -1,0 +1,47 @@
+# Aedilis
+
+LUDIARS の **施設予約サービス**。 同時に「予定の登録/反映」 を担い、 Schedula /
+Google Calendar と双方向連携する (連携は v0.3 以降)。
+
+短縮コード: **Ae**
+
+> 名の由来: 古代ローマの **aedilis** — 公共建物・市場・公式祭礼カレンダーを
+> 統括した官職。 「施設管理 + 行事スケジュール」 が職務そのまま。
+
+## 機能 (v0.2)
+
+- **施設一覧** — 会議室・ホール等のマスタを参照 (`FacilitySource` 抽象、 v0.2 は JSON)
+- **予約 CRUD** — 作成 / 一覧 / 時刻・目的の修正 / キャンセル
+- **重複検知** — 同一施設 × 時間帯の重複を 409 で拒否 (重複可フラグ付き施設は許可)
+- **admin 操作** — 代理キャンセル / 重複可フラグ切替
+- 認証は Cernere PASETO V4 (公開鍵 fetch)
+
+カレンダー連携 (Schedula / Google) は v0.3 以降。 設計は [DESIGN.md](./DESIGN.md)。
+
+## 構成
+
+- 単一 Hono アプリ (`server/`) が REST API + 静的 SPA を提供
+- 永続化は SQLite (`data/aedilis.db`、 better-sqlite3 / WAL)
+- フロントエンドは esbuild + vanilla TypeScript
+- 施設マスタは `facilities.json` (`FacilitySource` 抽象で差替可能)
+
+## 起動
+
+Bibliotheca と同じ env bootstrap (Infisical / `.env` / host env の多段)。
+
+```bash
+npm install
+npm run dev        # tsx watch、 public/app.js を build してから起動
+```
+
+必須 env: `CERNERE_BASE_URL`、 `AEDILIS_PUBLIC_URL`。
+任意: `AEDILIS_PORT` (既定 17502)、 `AEDILIS_ADMIN_IDS`、 `AEDILIS_DATA`、
+`AEDILIS_FACILITIES` (施設マスタ JSON のパス、 既定はリポ直下 `facilities.json`)。
+
+## ポート
+
+`17502` — LUDIARS loopback レンジ。 17500 は Dropbox squat、 17501 は Bibliotheca。
+
+## ライセンス
+
+リポジトリの LICENSE に準ずる。

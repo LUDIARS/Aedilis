@@ -1,0 +1,36 @@
+{
+  "name": "aedilis",
+  "version": "0.2.0",
+  "private": true,
+  "description": "LUDIARS Aedilis — facility reservation + schedule registration (Cernere SSO)",
+  "type": "module",
+  "scripts": {
+    "predev": "npm run build:web",
+    "dev": "tsx watch --env-file-if-exists=.env.secrets --env-file-if-exists=.env server/bootstrap.ts",
+    "prestart": "npm run build:web",
+    "start": "tsx --env-file-if-exists=.env.secrets --env-file-if-exists=.env server/bootstrap.ts",
+    "build:web": "esbuild public/src/app.ts --bundle --outfile=public/app.js --target=es2020 --sourcemap --format=esm",
+    "watch:web": "esbuild public/src/app.ts --bundle --outfile=public/app.js --target=es2020 --sourcemap --format=esm --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.frontend.json",
+    "env:setup": "npx tsx ../Cernere/packages/env-cli/src/cli.ts setup",
+    "env:test": "npx tsx ../Cernere/packages/env-cli/src/cli.ts test",
+    "env:gen": "npx tsx ../Cernere/packages/env-cli/src/cli.ts env",
+    "env:list": "npx tsx ../Cernere/packages/env-cli/src/cli.ts list",
+    "env:get": "npx tsx ../Cernere/packages/env-cli/src/cli.ts get",
+    "env:set": "npx tsx ../Cernere/packages/env-cli/src/cli.ts set",
+    "env:initialize": "npx tsx ../Cernere/packages/env-cli/src/cli.ts initialize"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^11.3.0",
+    "hono": "^4.6.10",
+    "paseto": "^3.1.4",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.6.0"
+  }
+}

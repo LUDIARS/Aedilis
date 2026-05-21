@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aedilis — 施設予約</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Aedilis</h1>
+    <span class="tagline">施設予約</span>
+    <span id="user" class="user"></span>
+  </header>
+
+  <main id="app">
+    <section class="panel">
+      <h2>新規予約</h2>
+      <form id="reserve-form">
+        <label>施設
+          <select id="f-facility" required></select>
+        </label>
+        <label>開始
+          <input id="f-start" type="datetime-local" required />
+        </label>
+        <label>終了
+          <input id="f-end" type="datetime-local" required />
+        </label>
+        <label>目的
+          <input id="f-purpose" type="text" maxlength="200" placeholder="(任意)" />
+        </label>
+        <button type="submit">予約する</button>
+      </form>
+      <p id="status"></p>
+    </section>
+
+    <section class="panel">
+      <h2>予約一覧</h2>
+      <div id="reservations"></div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

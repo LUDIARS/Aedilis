@@ -1,0 +1,10 @@
+{
+  "name": "Aedilis — 施設予約",
+  "short_name": "Aedilis",
+  "description": "LUDIARS の施設予約サービス",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#2563eb",
+  "icons": []
+}

@@ -1,0 +1,33 @@
+[
+  {
+    "id": "room-a",
+    "name": "会議室A",
+    "location": "本館2F",
+    "capacity": 8,
+    "equipment": ["プロジェクタ", "ホワイトボード"],
+    "allowOverlap": false
+  },
+  {
+    "id": "room-b",
+    "name": "会議室B",
+    "location": "本館2F",
+    "capacity": 4,
+    "equipment": ["ホワイトボード"],
+    "allowOverlap": false
+  },
+  {
+    "id": "hall",
+    "name": "多目的ホール",
+    "location": "別館1F",
+    "capacity": 50,
+    "equipment": ["音響設備", "プロジェクタ"],
+    "allowOverlap": false
+  },
+  {
+    "id": "lab-1",
+    "name": "実験室1",
+    "location": "本館3F",
+    "capacity": 12,
+    "allowOverlap": false
+  }
+]
