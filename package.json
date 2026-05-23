@@ -12,6 +12,7 @@
     "build:web": "esbuild public/src/app.ts --bundle --outfile=public/app.js --target=es2020 --sourcemap --format=esm",
     "watch:web": "esbuild public/src/app.ts --bundle --outfile=public/app.js --target=es2020 --sourcemap --format=esm --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.frontend.json",
+    "test": "vitest run",
     "env:setup": "npx tsx ../Cernere/packages/env-cli/src/cli.ts setup",
     "env:test": "npx tsx ../Cernere/packages/env-cli/src/cli.ts test",
     "env:gen": "npx tsx ../Cernere/packages/env-cli/src/cli.ts env",
@@ -31,6 +32,7 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.14.0",
     "esbuild": "^0.27.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.7"
   }
 }

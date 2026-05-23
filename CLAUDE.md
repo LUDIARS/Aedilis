@@ -45,5 +45,9 @@
 
 ## テスト方針
 
-- v0.2 は手動 (`npm run dev` → ブラウザで施設選択 → 予約 → 別アカでキャンセル)
-- typecheck (`npm run typecheck`) は必ず通す
+- 自動: `npm test` (vitest, `test/`) — db.ts の予約 CRUD / 重複検知、
+  `LocalFacilitySource`、 ルーターの認証ゲートを in-memory SQLite でカバー
+  (Cernere / ネットワーク不要)
+- CI: `.github/workflows/test.yml` が push / PR で typecheck + build:web + test
+- 手動: `npm run dev` → ブラウザで施設選択 → 予約 → 別アカでキャンセル
+- typecheck (`npm run typecheck`) は必ず通す。 test 配下も tsconfig に含む
