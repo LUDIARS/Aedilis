@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      types:
+        patterns:
+          - "@types/*"
+      tooling:
+        patterns:
+          - "esbuild"
+          - "tsx"
+          - "vitest"
+          - "typescript"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
