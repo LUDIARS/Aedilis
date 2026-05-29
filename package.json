@@ -22,7 +22,7 @@
     "env:initialize": "npx tsx ../Cernere/packages/env-cli/src/cli.ts initialize"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
+    "@hono/node-server": "^2.0.4",
     "better-sqlite3": "^11.3.0",
     "hono": "^4.12.23",
     "paseto": "^3.1.4",
