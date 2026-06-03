@@ -11,8 +11,14 @@
  */
 
 import { ensureEnv, missingWantedKeys, hasInfisicalCreds } from './lib/env-bootstrap.ts';
+import { install as installVestigium } from '@ludiars/vestigium';
 
 const main = async (): Promise<void> => {
+  installVestigium({
+    serviceCode: 'ae',
+    captureConsole: true,
+    pinoTransport: false,
+  });
   const result = await ensureEnv();
   if (result.reason === 'no_creds') {
     if (hasInfisicalCreds()) {
