@@ -11,6 +11,7 @@
   <header>
     <h1>Aedilis</h1>
     <span class="tagline">出席チェックイン</span>
+    <a class="nav-link" href="/">施設予約</a>
     <span id="user" class="user"></span>
   </header>
 
@@ -18,16 +19,19 @@
     <section class="panel">
       <h2>ゲートウェイ設定</h2>
       <p class="hint">会場の LAN ゲートウェイ (Ostiarius) の URL を設定します。</p>
-      <label>ゲートウェイ URL
-        <input id="gateway-url" type="url" placeholder="http://192.168.x.x:17590" />
-      </label>
-      <button id="save-gateway" type="button">URL を保存</button>
+      <form class="foundation-form" id="gateway-form">
+        <label>ゲートウェイ URL
+          <input id="gateway-url" type="url" inputmode="url" autocomplete="off"
+                 placeholder="http://192.168.x.x:17590" />
+        </label>
+        <button id="save-gateway" class="btn-primary" type="button">URL を保存</button>
+      </form>
     </section>
 
     <section class="panel">
       <h2>チェックイン</h2>
       <p class="hint">ボタンを押すと passkey (生体認証) で会場の出席を記録します。</p>
-      <button id="checkin-btn" type="button">出席チェックイン</button>
+      <button id="checkin-btn" class="btn-primary" type="button">出席チェックイン</button>
       <p id="status"></p>
     </section>
 
