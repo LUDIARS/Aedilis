@@ -11,6 +11,7 @@ import { LocalFacilitySource } from '../server/facility/local.ts';
 import { makeFacilityRouter } from '../server/routes/facilities.ts';
 import { makeMeRouter } from '../server/routes/me.ts';
 import { makeReservationRouter } from '../server/routes/reservations.ts';
+import { makeCheckinRouter } from '../server/routes/checkin.ts';
 
 function buildApp(): Hono {
   const db = openDb(':memory:');
@@ -20,6 +21,7 @@ function buildApp(): Hono {
   app.route('/api/me', makeMeRouter(db));
   app.route('/api/facilities', makeFacilityRouter(db, source));
   app.route('/api/reservations', makeReservationRouter(db, source));
+  app.route('/api', makeCheckinRouter(db));
   return app;
 }
 
@@ -32,6 +34,11 @@ const protectedRoutes: Array<{ method: string; path: string }> = [
   { method: 'POST', path: '/api/reservations' },
   { method: 'PATCH', path: '/api/reservations/some-id' },
   { method: 'DELETE', path: '/api/reservations/some-id' },
+  { method: 'POST', path: '/api/checkin/verify' },
+  { method: 'GET', path: '/api/checkin/mine' },
+  { method: 'GET', path: '/api/checkin' },
+  { method: 'POST', path: '/api/admin/gateways' },
+  { method: 'GET', path: '/api/admin/gateways' },
 ];
 
 describe('auth gate', () => {

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aedilis — 出席チェックイン</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Aedilis</h1>
+    <span class="tagline">出席チェックイン</span>
+    <span id="user" class="user"></span>
+  </header>
+
+  <main id="app">
+    <section class="panel">
+      <h2>ゲートウェイ設定</h2>
+      <p class="hint">会場の LAN ゲートウェイ (Ostiarius) の URL を設定します。</p>
+      <label>ゲートウェイ URL
+        <input id="gateway-url" type="url" placeholder="http://192.168.x.x:17590" />
+      </label>
+      <button id="save-gateway" type="button">URL を保存</button>
+    </section>
+
+    <section class="panel">
+      <h2>チェックイン</h2>
+      <p class="hint">ボタンを押すと passkey (生体認証) で会場の出席を記録します。</p>
+      <button id="checkin-btn" type="button">出席チェックイン</button>
+      <p id="status"></p>
+    </section>
+
+    <section class="panel">
+      <h2>出席履歴</h2>
+      <div id="history"></div>
+    </section>
+
+    <p class="hint"><a href="/">← 施設予約へ戻る</a></p>
+  </main>
+
+  <script type="module" src="/checkin.js"></script>
+</body>
+</html>

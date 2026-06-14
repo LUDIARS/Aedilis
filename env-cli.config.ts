@@ -36,6 +36,12 @@ const config: EnvCliConfig = {
 
     // ─── Schedula (予定基盤) の API ベース — v0.3 のカレンダー連携で使用 ─
     SCHEDULA_BASE_URL: "",
+
+    // ─── 出席チェックイン (CONTRACTS §4/§5) ─────────────────────
+    // Memoria 出席 webhook (Imperativus relay の受け口)。 未設定なら送らない。
+    MEMORIA_WEBHOOK_URL: "",
+    // PWA に pre-fill する既定の会場ゲートウェイ URL。 未設定なら画面入力。
+    AEDILIS_DEFAULT_GATEWAY_URL: "",
   },
 
   secretsPath: ".env.secrets",

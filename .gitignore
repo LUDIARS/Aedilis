@@ -4,4 +4,6 @@ data/
 .env.secrets
 public/app.js
 public/app.js.map
+public/checkin.js
+public/checkin.js.map
 review/
