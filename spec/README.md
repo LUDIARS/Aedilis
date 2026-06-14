@@ -19,6 +19,12 @@ spec/
 ```
 > `plan/` は未設置（マイルストーンは [`../DESIGN.md`](../DESIGN.md) §12）。
 
+## setup 一覧
+| ドキュメント | 用途 |
+|---|---|
+| [setup/setup.md](setup/setup.md) | 起動・基本 env |
+| [setup/webauthn-rp-id.md](setup/webauthn-rp-id.md) | 出席チェックインの WebAuthn RP ID / origin を 3 サービス (Cernere / Ostiarius / Aedilis) で eTLD+1 に統一する横断配線 |
+
 ## feature 一覧
 | ドキュメント | 概要 | 状態 |
 |---|---|---|

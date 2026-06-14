@@ -18,6 +18,10 @@ npm run dev    # tsx watch。public/app.js を build してから起動
 | `AEDILIS_ADMIN_IDS` | 任意 | admin 操作を許す Cernere user id（カンマ区切り） |
 | `AEDILIS_DATA` | 任意 | SQLite データの場所 |
 
+> 出席チェックインを本番配線するときは、WebAuthn の RP ID / origin を
+> Cernere / Ostiarius と同一 eTLD+1 に揃える必要がある。横断 env 配線は
+> [`./webauthn-rp-id.md`](./webauthn-rp-id.md) を参照。
+
 ## ポート
 - `17502`（LUDIARS loopback レンジ）。17500 は Dropbox squat、17501 は Bibliotheca。
 
