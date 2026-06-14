@@ -26,7 +26,7 @@
     "@ludiars/vestigium": "git+https://github.com/LUDIARS/Vestigium.git",
     "@simplewebauthn/browser": "^13.3.0",
     "better-sqlite3": "^12.10.0",
-    "hono": "^4.12.23",
+    "hono": "^4.12.25",
     "paseto": "^3.1.4",
     "tsx": "^4.21.0"
   },
