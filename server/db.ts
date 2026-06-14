@@ -42,6 +42,25 @@ export interface UserDisplayRow {
   updated_at: number;
 }
 
+export interface GatewayRegistryRow {
+  lan_id: string;
+  public_key_pem: string;
+  facility_id: string;
+  label: string;
+  created_at: number;
+}
+
+export interface AttendanceRow {
+  id: string;
+  user_id: string;
+  facility_id: string;
+  lan_id: string;
+  checked_in_at: number;
+  reservation_id: string | null;
+  nonce: string;
+  created_at: number;
+}
+
 export function openDb(dbPath: string): Database.Database {
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
@@ -80,6 +99,30 @@ export function openDb(dbPath: string): Database.Database {
       name       TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    -- 出席チェックイン (CONTRACTS §4)。 会場ゲートウェイ (Ostiarius) の公開鍵を
+    -- lan_id で引いて attestation を検証する。 attendance は Cernere sub アンカーのみ。
+    CREATE TABLE IF NOT EXISTS gateway_registry (
+      lan_id         TEXT PRIMARY KEY,
+      public_key_pem TEXT NOT NULL,
+      facility_id    TEXT NOT NULL,
+      label          TEXT NOT NULL DEFAULT '',
+      created_at     INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS attendance (
+      id             TEXT PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      facility_id    TEXT NOT NULL,
+      lan_id         TEXT NOT NULL,
+      checked_in_at  INTEGER NOT NULL,
+      reservation_id TEXT,
+      nonce          TEXT NOT NULL,
+      created_at     INTEGER NOT NULL
+    );
+    -- 新規テーブルなので INDEX を同 exec に置いてよい (既存 DB の no such column は起きない)。
+    CREATE UNIQUE INDEX IF NOT EXISTS attendance_nonce ON attendance(nonce);
+    CREATE INDEX IF NOT EXISTS attendance_user ON attendance(user_id, checked_in_at);
   `);
   return db;
 }
@@ -305,4 +348,150 @@ export function getUserDisplay(
     )
     .get(userId);
   return row?.name ?? null;
+}
+
+// ── Gateway registry (出席ゲートウェイ公開鍵) ────────────────────────────────
+
+/** 会場ゲートウェイの公開鍵を upsert (lan_id が PK)。 created_at は初回のみ。 */
+export function upsertGateway(
+  db: Database.Database,
+  args: { lanId: string; publicKeyPem: string; facilityId: string; label?: string },
+): GatewayRegistryRow {
+  db.prepare(
+    `INSERT INTO gateway_registry (lan_id, public_key_pem, facility_id, label, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(lan_id) DO UPDATE SET
+       public_key_pem = excluded.public_key_pem,
+       facility_id    = excluded.facility_id,
+       label          = excluded.label`,
+  ).run(args.lanId, args.publicKeyPem, args.facilityId, args.label ?? '', Date.now());
+  return getGateway(db, args.lanId) as GatewayRegistryRow;
+}
+
+export function getGateway(
+  db: Database.Database,
+  lanId: string,
+): GatewayRegistryRow | null {
+  return (
+    db
+      .prepare<[string], GatewayRegistryRow>(
+        `SELECT * FROM gateway_registry WHERE lan_id = ?`,
+      )
+      .get(lanId) ?? null
+  );
+}
+
+export function listGateways(db: Database.Database): GatewayRegistryRow[] {
+  return db
+    .prepare<[], GatewayRegistryRow>(
+      `SELECT * FROM gateway_registry ORDER BY created_at`,
+    )
+    .all();
+}
+
+// ── Attendance (出席記録) ────────────────────────────────────────────────────
+
+/**
+ * 出席を記録する。 nonce は UNIQUE — 既に同じ nonce が記録済なら 'duplicate'
+ * を返す (replay 検出)。 race condition でも UNIQUE 制約で原子的に弾く。
+ */
+export function insertAttendance(
+  db: Database.Database,
+  args: {
+    userId: string;
+    facilityId: string;
+    lanId: string;
+    checkedInAt: number;
+    reservationId: string | null;
+    nonce: string;
+  },
+): AttendanceRow | 'duplicate' {
+  const id = randomUUID();
+  try {
+    db.prepare(
+      `INSERT INTO attendance
+         (id, user_id, facility_id, lan_id, checked_in_at, reservation_id, nonce, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      args.userId,
+      args.facilityId,
+      args.lanId,
+      args.checkedInAt,
+      args.reservationId,
+      args.nonce,
+      Date.now(),
+    );
+  } catch (e) {
+    if (e instanceof Error && (e as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return 'duplicate';
+    }
+    throw e;
+  }
+  return db
+    .prepare<[string], AttendanceRow>(`SELECT * FROM attendance WHERE id = ?`)
+    .get(id) as AttendanceRow;
+}
+
+export function listAttendanceForUser(
+  db: Database.Database,
+  userId: string,
+): AttendanceRow[] {
+  return db
+    .prepare<[string], AttendanceRow>(
+      `SELECT * FROM attendance WHERE user_id = ? ORDER BY checked_in_at DESC LIMIT 200`,
+    )
+    .all(userId);
+}
+
+export function listAttendance(
+  db: Database.Database,
+  filter: { facilityId?: string; from?: number; to?: number },
+): AttendanceRow[] {
+  const where: string[] = ['1 = 1'];
+  const params: Array<string | number> = [];
+  if (filter.facilityId) {
+    where.push('facility_id = ?');
+    params.push(filter.facilityId);
+  }
+  if (typeof filter.from === 'number') {
+    where.push('checked_in_at >= ?');
+    params.push(filter.from);
+  }
+  if (typeof filter.to === 'number') {
+    where.push('checked_in_at < ?');
+    params.push(filter.to);
+  }
+  return db
+    .prepare<Array<string | number>, AttendanceRow>(
+      `SELECT * FROM attendance WHERE ${where.join(' AND ')}
+       ORDER BY checked_in_at DESC LIMIT 500`,
+    )
+    .all(...params);
+}
+
+/**
+ * checkedInAt 時点で有効な confirmed 予約を 1 件探す (同 user × facility)。
+ * [start_at, end_at) に checkedInAt が含まれるものが対象。 無ければ null (= walk-in)。
+ */
+export function findMatchingReservation(
+  db: Database.Database,
+  userId: string,
+  facilityId: string,
+  checkedInAt: number,
+): ReservationRow | null {
+  return (
+    db
+      .prepare<[string, string, number, number], ReservationRow>(
+        `SELECT * FROM reservation
+         WHERE owner_user_id = ?
+           AND facility_id = ?
+           AND state = 'confirmed'
+           AND start_at <= ?
+           AND end_at > ?
+         ORDER BY start_at DESC
+         LIMIT 1`,
+      )
+      .get(userId, facilityId, checkedInAt, checkedInAt) ?? null
+  );
 }

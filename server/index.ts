@@ -20,6 +20,7 @@ import { LocalFacilitySource } from './facility/local.ts';
 import { makeMeRouter } from './routes/me.ts';
 import { makeFacilityRouter } from './routes/facilities.ts';
 import { makeReservationRouter } from './routes/reservations.ts';
+import { makeCheckinRouter } from './routes/checkin.ts';
 import { corpusManifest, CORPUS_MANIFEST_PATH } from './corpus.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -79,8 +80,18 @@ app.use(
   }),
 );
 
+// 既定ゲートウェイ URL は PWA が会場 LAN アドレスを pre-fill するために配る
+// (任意。 未設定なら null = ユーザが画面で入力する。 CONTRACTS §4 PWA 節)。
+const DEFAULT_GATEWAY_URL =
+  process.env.AEDILIS_DEFAULT_GATEWAY_URL?.trim() || null;
+
 app.get('/api/health', (c) =>
-  c.json({ ok: true, service: 'aedilis', port: PORT }),
+  c.json({
+    ok: true,
+    service: 'aedilis',
+    port: PORT,
+    defaultGatewayUrl: DEFAULT_GATEWAY_URL,
+  }),
 );
 
 // Corpus hub 連携 — サービスマニフェスト (認証不要)。 Corpus が読み、
@@ -90,6 +101,8 @@ app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 app.route('/api/me', makeMeRouter(db));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
+// 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。
+app.route('/api', makeCheckinRouter(db));
 
 // serveStatic は cwd 相対なので、 npm scripts は repo root から起動する前提。
 app.use('/*', serveStatic({ root: './public' }));
