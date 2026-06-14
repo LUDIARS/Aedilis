@@ -1,0 +1,24 @@
+{
+  "name": "aedilis-checkin-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Step1 spike: passkey-signed LAN-challenge -> offline verify -> signed attestation -> cloud verify",
+  "scripts": {
+    "build:web": "esbuild client.ts --bundle --outfile=client.js --target=es2020 --format=esm --sourcemap",
+    "predev:gateway": "npm run build:web",
+    "dev:gateway": "tsx gateway-server.ts",
+    "dev:cloud": "tsx cloud-server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
