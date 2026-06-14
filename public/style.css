@@ -176,3 +176,8 @@ button[type="submit"]:hover { filter: brightness(1.08); }
 .admin-row:last-child { border-bottom: none; }
 .admin-row .name { flex: 1; }
 .toggle { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+
+/* 出席チェックイン (checkin.html) */
+header .nav-link { font-size: 0.85rem; color: var(--accent); text-decoration: none; }
+header .nav-link:hover { text-decoration: underline; }
+#checkin-btn { font-size: 1.05rem; padding: 0.7rem 1rem; }
