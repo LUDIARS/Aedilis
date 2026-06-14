@@ -1,9 +1,14 @@
-// Memoria 出席イベント webhook (CONTRACTS §5)。
+// 出席イベント webhook (CONTRACTS §5)。
 //
 // env MEMORIA_WEBHOOK_URL が設定されている時のみ POST する (fire-and-forget)。
+//
+// 【既定の向き先 = relay】 この URL は Memoria を直接叩くのではなく
+// **Imperativus / Legatus relay の出席エンドポイント** を指すのが正
+// (relay → Memoria ingest で presence/attendance ログとして 1 件追加される)。
 // Memoria は online 直接 write 不可 ([[feedback_memoria_online_flow]]) なので、
-// この URL は **Imperativus relay の受け口** を指す前提 (presence/attendance ログ
-// として 1 件追加される)。 直接 Memoria を叩く構成にはしないこと。
+// 直 Memoria URL を入れる構成にはしないこと。 コードは渡された URL に POST する
+// だけで宛先を強制しないが、運用上の正は relay 経由。
+// 配線詳細は spec/setup/webauthn-rp-id.md §6 / README「出席チェックイン用」節。
 //
 // 失敗は warn のみ。 出席記録そのものは成功扱いにする (通知は副次的)。
 

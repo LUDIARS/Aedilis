@@ -41,6 +41,7 @@ Google Calendar と双方向連携する (連携は v0.3 以降)。
 
 > Ostiarius / PWA / Cernere の origin・RP ID は同一 eTLD+1 に揃える前提
 > (passkey assertion がゲートウェイで検証できるようにするため)。
+> 横断 env 配線は [`spec/setup/webauthn-rp-id.md`](spec/setup/webauthn-rp-id.md)。
 
 ## 構成
 
@@ -63,9 +64,14 @@ npm run dev        # tsx watch、 public/app.js を build してから起動
 `AEDILIS_FACILITIES` (施設マスタ JSON のパス、 既定はリポ直下 `facilities.json`)。
 
 出席チェックイン用 (任意):
-- `MEMORIA_WEBHOOK_URL` — 出席イベントの送信先 (Imperativus relay の受け口)。
-  未設定なら webhook を送らない。
+- `MEMORIA_WEBHOOK_URL` — 出席イベントの送信先。**既定の向き先は Imperativus /
+  Legatus relay の出席エンドポイント** (relay → Memoria ingest)。Memoria を直接
+  叩く構成にはしない (Memoria は online 直接 write 不可)。未設定なら送らない。
 - `AEDILIS_DEFAULT_GATEWAY_URL` — PWA に pre-fill する既定の会場ゲートウェイ URL。
+
+> 本番で出席チェックインを成立させるには、WebAuthn の RP ID / origin を
+> Cernere / Ostiarius と同一 eTLD+1 に揃える必要がある。3 サービスの env 配線は
+> [`spec/setup/webauthn-rp-id.md`](spec/setup/webauthn-rp-id.md) を参照。
 
 ## ポート
 
