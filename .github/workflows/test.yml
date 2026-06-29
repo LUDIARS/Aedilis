@@ -15,11 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: actions/setup-node@v6
         with:
           node-version: "24.14.1"
           cache: npm
+
+      - name: Build submodules
+        run: |
+          cd lib/vestigium && npm install --ignore-scripts && npm run build && cd ../..
 
       - run: npm ci
 
