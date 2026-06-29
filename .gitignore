@@ -7,3 +7,6 @@ public/app.js.map
 public/checkin.js
 public/checkin.js.map
 review/
+
+# ローカル依存ライブラリ (git submodule update --init でセットアップ)
+/lib/
