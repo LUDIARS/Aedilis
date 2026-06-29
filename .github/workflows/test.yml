@@ -25,7 +25,7 @@ jobs:
 
       - name: Build submodules
         run: |
-          cd lib/vestigium && npm install --ignore-scripts && npm run build && cd ../..
+          cd lib/vestigium && npm install --ignore-scripts && npm run build && npm prune --omit=dev && cd ../..
 
       - run: npm ci
 
