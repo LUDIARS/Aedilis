@@ -70,7 +70,7 @@ async function refreshPublicKeys(): Promise<void> {
 async function verifyToken(token: string): Promise<AuthIdentity | null> {
   if (!optsRef) return null;
   if (!token.startsWith('v4.public.')) return null;
-  for (const [kid, entry] of keyCache.entries()) {
+  for (const entry of keyCache.values()) {
     try {
       const result = (await V4.verify(token, entry.key, {
         complete: true,
@@ -82,7 +82,6 @@ async function verifyToken(token: string): Promise<AuthIdentity | null> {
       if (payload.kind !== 'user_for_project') return null;
       const userId = typeof payload.sub === 'string' ? payload.sub : null;
       if (!userId) return null;
-      void kid;
       return {
         userId,
         role: typeof payload.role === 'string' ? payload.role : 'general',
