@@ -22,6 +22,7 @@ import { makeFacilityRouter } from './routes/facilities.ts';
 import { makeReservationRouter } from './routes/reservations.ts';
 import { makeCheckinRouter } from './routes/checkin.ts';
 import { corpusManifest, CORPUS_MANIFEST_PATH } from './corpus.ts';
+import { createCernereProjectClient } from './lib/cernere-project-client.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +56,13 @@ const FACILITIES_PATH = resolve(
 const CERNERE_BASE_URL = requireEnv('CERNERE_BASE_URL');
 const AUDIENCE = requireEnv('AEDILIS_PUBLIC_URL');
 
+// Aedilis 自身の Cernere "aedilis" project 登録用資格情報 (Excubitor catalog が
+// Cernere の Infisical project からクロスサービス secret-broker 経由で配る)。
+// 値が本当に Infisical へ投入されるのは別 (運用) タスクだが、 コード側は
+// fail-fast で扱う — 未設定を黙ってスキップしない (CLAUDE.md の暗黙 fallback 禁止)。
+const CERNERE_CLIENT_ID = requireEnv('AEDILIS_CERNERE_CLIENT_ID');
+const CERNERE_CLIENT_SECRET = requireEnv('AEDILIS_CERNERE_CLIENT_SECRET');
+
 const ADMIN_IDS = new Set(
   (process.env.AEDILIS_ADMIN_IDS ?? '')
     .split(',')
@@ -68,6 +76,16 @@ startAuth({
   audience: AUDIENCE,
   adminIds: ADMIN_IDS,
 });
+
+// vantan_user プロジェクトの学生プロフィール読み取り用 WS project client。
+// 接続は非同期・非ブロッキングで開始する (Cernere 側が未起動/未登録でも
+// Aedilis 自体の起動は止めない — startAuth の公開鍵 fetch と同じ思想)。
+const cernereProjectClient = createCernereProjectClient({
+  cernereBaseUrl: CERNERE_BASE_URL,
+  clientId: CERNERE_CLIENT_ID,
+  clientSecret: CERNERE_CLIENT_SECRET,
+});
+cernereProjectClient.start();
 
 const facilitySource = new LocalFacilitySource(FACILITIES_PATH);
 
@@ -102,7 +120,9 @@ app.route('/api/me', makeMeRouter(db));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 // 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。
-app.route('/api', makeCheckinRouter(db));
+// admin 一覧 (GET /api/checkin) は vantan_user プロフィール (department/grade等) で
+// enrich する — cernereProjectClient を渡す。
+app.route('/api', makeCheckinRouter(db, cernereProjectClient));
 
 // serveStatic は cwd 相対なので、 npm scripts は repo root から起動する前提。
 app.use('/*', serveStatic({ root: './public' }));
@@ -122,4 +142,5 @@ serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`[aedilis] cernere: ${CERNERE_BASE_URL}`);
   console.log(`[aedilis] audience: ${AUDIENCE}`);
   console.log(`[aedilis] admin user ids: ${ADMIN_IDS.size}`);
+  console.log(`[aedilis] cernere project client: starting (client_id=${CERNERE_CLIENT_ID})`);
 });
