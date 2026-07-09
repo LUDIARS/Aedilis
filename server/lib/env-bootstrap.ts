@@ -17,6 +17,11 @@ const WANTED_KEYS: readonly string[] = [
   'CERNERE_BASE_URL',
   'AEDILIS_PUBLIC_URL',
   'AEDILIS_ADMIN_IDS',
+  // Cernere 上の "aedilis" project 登録用資格情報。 Excubitor catalog が Cernere 自身の
+  // Infisical project からクロスサービス secret-broker 経由で配る (別タスクで実装済み)。
+  // 値自体はまだ未投入 (運用側の別作業) — ここでは「注入されたら拾う」対応のみ。
+  'AEDILIS_CERNERE_CLIENT_ID',
+  'AEDILIS_CERNERE_CLIENT_SECRET',
 ];
 
 export interface InfisicalCreds {

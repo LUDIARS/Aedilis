@@ -14,6 +14,7 @@ import {
 } from '../db.ts';
 import { isValidPublicKeyPem } from '../checkin/attestation.ts';
 import { processCheckin } from '../checkin/service.ts';
+import type { VantanUserProfile } from '../lib/cernere-project-client.ts';
 
 function numQuery(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -21,7 +22,41 @@ function numQuery(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-export function makeCheckinRouter(db: Database.Database): Hono {
+/**
+ * makeCheckinRouter が必要とする最小のプロフィール取得インターフェース。
+ * 具象クラス (CernereProjectClient) ではなくこの形に依存することで、
+ * ルーター側はテスト時にフェイクを注入しやすく、 未接続でも動作を保てる。
+ */
+export interface VantanProfileLookup {
+  getVantanUserProfile(userId: string): Promise<VantanUserProfile | null>;
+}
+
+/**
+ * userId ごとに vantanProfiles.getVantanUserProfile を呼び、 見つかった分だけ
+ * userId → profile の Map を返す。 個々の失敗 (未接続 / lookup エラー) は
+ * warn ログのみで握りつぶす — 出席一覧が Cernere 障害で丸ごと 500 にならないように。
+ */
+async function fetchVantanProfiles(
+  vantanProfiles: VantanProfileLookup | undefined,
+  userIds: readonly string[],
+): Promise<Map<string, VantanUserProfile>> {
+  const result = new Map<string, VantanUserProfile>();
+  if (!vantanProfiles) return result;
+  const uniqueIds = Array.from(new Set(userIds));
+  await Promise.all(
+    uniqueIds.map(async (userId) => {
+      try {
+        const profile = await vantanProfiles.getVantanUserProfile(userId);
+        if (profile) result.set(userId, profile);
+      } catch (err) {
+        console.warn(`[aedilis] vantan_user profile lookup failed for ${userId}: ${(err as Error).message}`);
+      }
+    }),
+  );
+  return result;
+}
+
+export function makeCheckinRouter(db: Database.Database, vantanProfiles?: VantanProfileLookup): Hono {
   const r = new Hono();
 
   // 出席チェックイン本体 — attestation を検証して記録する。
@@ -51,11 +86,20 @@ export function makeCheckinRouter(db: Database.Database): Hono {
   });
 
   // 出席一覧 (admin) — ?facility=&from=&to=
-  r.get('/checkin', requireAuth, requireAdmin, (c) => {
+  // vantanProfiles が渡されていれば各行に vantan_user のプロフィール
+  // (department/grade/name/desiredJob) を enrich する。 未接続/lookup失敗時は
+  // 該当行の vantanProfile が null になるだけで一覧自体は返す (fetchVantanProfiles 参照)。
+  r.get('/checkin', requireAuth, requireAdmin, async (c) => {
     const facilityId = c.req.query('facility') || undefined;
     const from = numQuery(c.req.query('from'));
     const to = numQuery(c.req.query('to'));
-    return c.json({ items: listAttendance(db, { facilityId, from, to }) });
+    const rows = listAttendance(db, { facilityId, from, to });
+    const profiles = await fetchVantanProfiles(vantanProfiles, rows.map((row) => row.user_id));
+    const items = rows.map((row) => ({
+      ...row,
+      vantanProfile: profiles.get(row.user_id) ?? null,
+    }));
+    return c.json({ items });
   });
 
   // ゲートウェイ登録 (admin) — 公開鍵 PEM を upsert
