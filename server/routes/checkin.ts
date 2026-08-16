@@ -10,10 +10,14 @@ import {
   listAttendance,
   listAttendanceForUser,
   listGateways,
+  getAttendancePolicySummary,
+  getGatewayByTokenHash,
+  insertCheckinEventSummary,
   upsertGateway,
 } from '../db.ts';
 import { isValidPublicKeyPem } from '../checkin/attestation.ts';
-import { processCheckin } from '../checkin/service.ts';
+import { gatewayTokenFromAuthorization, hashGatewayToken, issueGatewayToken, tokenHashesMatch } from '../checkin/gateway-token.ts';
+import { getCheckinPolicy, processCheckin } from '../checkin/service.ts';
 import type { VantanUserProfile } from '../lib/cernere-project-client.ts';
 
 function numQuery(value: string | undefined): number | undefined {
@@ -29,6 +33,26 @@ function numQuery(value: string | undefined): number | undefined {
  */
 export interface VantanProfileLookup {
   getVantanUserProfile(userId: string): Promise<VantanUserProfile | null>;
+}
+
+function publicGateway(gateway: ReturnType<typeof upsertGateway>) {
+  const { token_hash: _tokenHash, ...publicFields } = gateway;
+  return publicFields;
+}
+
+function authorizedGateway(db: Database.Database, authorization: string | undefined) {
+  const token = gatewayTokenFromAuthorization(authorization);
+  if (!token) return null;
+  const tokenHash = hashGatewayToken(token);
+  const gateway = getGatewayByTokenHash(db, tokenHash);
+  return gateway && tokenHashesMatch(tokenHash, gateway.token_hash) ? gateway : null;
+}
+
+function isCountSummary(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).every(
+    (count) => typeof count === 'number' && Number.isSafeInteger(count) && count >= 0,
+  );
 }
 
 /**
@@ -68,7 +92,7 @@ export function makeCheckinRouter(db: Database.Database, vantanProfiles?: Vantan
       return c.json({ error: 'bad_request', code: 'ATTESTATION_REQUIRED' }, 400);
     }
     const id = getIdentity(c);
-    const result = processCheckin(db, body.attestation, id.userId);
+    const result = processCheckin(db, body.attestation, { subjectUserId: id.userId });
     if (!result.ok) {
       return c.json({ error: result.error, code: result.code }, result.status);
     }
@@ -77,6 +101,29 @@ export function makeCheckinRouter(db: Database.Database, vantanProfiles?: Vantan
       attendanceId: result.attendanceId,
       matchedReservation: result.matchedReservation,
     });
+  });
+
+  // kiosk/Ostiarius 直送経路。gateway ごとに発行した token と登録鍵の両方を要求する。
+  r.post('/checkin/gateway-verify', async (c) => {
+    const gateway = authorizedGateway(db, c.req.header('authorization'));
+    if (!gateway) return c.json({ error: 'unauthorized', code: 'GATEWAY_TOKEN_REQUIRED' }, 401);
+    const body = (await c.req.json().catch(() => null)) as { attestation?: unknown } | null;
+    if (!body || typeof body.attestation !== 'string' || !body.attestation) {
+      return c.json({ error: 'bad_request', code: 'ATTESTATION_REQUIRED' }, 400);
+    }
+    const result = processCheckin(db, body.attestation, { gatewayLanId: gateway.lan_id });
+    if (!result.ok) return c.json({ error: result.error, code: result.code }, result.status);
+    return c.json({ ok: true, attendanceId: result.attendanceId, matchedReservation: result.matchedReservation });
+  });
+
+  // Ostiarius outbox の集計専用受け口。個別利用者や画像は受け取らない。
+  r.post('/checkin/events-summary', async (c) => {
+    const gateway = authorizedGateway(db, c.req.header('authorization'));
+    if (!gateway) return c.json({ error: 'unauthorized', code: 'GATEWAY_TOKEN_REQUIRED' }, 401);
+    const body = (await c.req.json().catch(() => null)) as { counts?: unknown } | null;
+    if (!body || !isCountSummary(body.counts)) return c.json({ error: 'bad_request', code: 'COUNTS_REQUIRED' }, 400);
+    const summary = insertCheckinEventSummary(db, { lanId: gateway.lan_id, counts: body.counts, receivedAt: Date.now() });
+    return c.json({ ok: true, summaryId: summary.id });
   });
 
   // 自分の出席履歴
@@ -99,7 +146,7 @@ export function makeCheckinRouter(db: Database.Database, vantanProfiles?: Vantan
       ...row,
       vantanProfile: profiles.get(row.user_id) ?? null,
     }));
-    return c.json({ items });
+    return c.json({ items, policy: getAttendancePolicySummary(db, getCheckinPolicy().passkeyStreakWarning) });
   });
 
   // ゲートウェイ登録 (admin) — 公開鍵 PEM を upsert
@@ -122,18 +169,21 @@ export function makeCheckinRouter(db: Database.Database, vantanProfiles?: Vantan
     if (!isValidPublicKeyPem(publicKeyPem)) {
       return c.json({ error: 'bad_request', code: 'INVALID_PUBLIC_KEY' }, 400);
     }
+    const gatewayToken = issueGatewayToken();
     const gateway = upsertGateway(db, {
       lanId,
       publicKeyPem,
       facilityId,
       label: typeof label === 'string' ? label : '',
+      tokenHash: hashGatewayToken(gatewayToken),
     });
-    return c.json({ gateway });
+    // The plaintext token is intentionally returned exactly once; only its hash is persisted.
+    return c.json({ gateway: publicGateway(gateway), gatewayToken });
   });
 
   // ゲートウェイ一覧 (admin)
   r.get('/admin/gateways', requireAuth, requireAdmin, (c) => {
-    return c.json({ items: listGateways(db) });
+    return c.json({ items: listGateways(db).map(publicGateway) });
   });
 
   return r;

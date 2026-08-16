@@ -15,7 +15,7 @@ import {
   openDb,
   upsertGateway,
 } from '../server/db.ts';
-import { b64urlEncode, type AttestationPayload } from '../server/checkin/attestation.ts';
+import { b64urlEncode, isValidPublicKeyPem, type AttestationPayload } from '../server/checkin/attestation.ts';
 import { processCheckin } from '../server/checkin/service.ts';
 
 let db: Database.Database;
@@ -31,7 +31,7 @@ beforeEach(() => {
   const pair = generateKeyPairSync('ed25519');
   privateKey = pair.privateKey;
   publicKeyPem = pair.publicKey.export({ type: 'spki', format: 'pem' }).toString();
-  upsertGateway(db, { lanId: LAN_ID, publicKeyPem, facilityId: FACILITY, label: 'Room 101' });
+  upsertGateway(db, { lanId: LAN_ID, publicKeyPem, facilityId: FACILITY, label: 'Room 101', tokenHash: 'test-token-hash' });
 });
 
 /** ゲートウェイ役: payload を署名して attestation トークンを作る。 */
@@ -58,7 +58,7 @@ describe('gateway registry', () => {
   });
 
   it('updates the key on re-upsert (PK = lan_id)', () => {
-    upsertGateway(db, { lanId: LAN_ID, publicKeyPem: 'PEM2', facilityId: 'room-2' });
+    upsertGateway(db, { lanId: LAN_ID, publicKeyPem: 'PEM2', facilityId: 'room-2', tokenHash: 'replacement-token-hash' });
     expect(getGateway(db, LAN_ID)?.public_key_pem).toBe('PEM2');
     expect(getGateway(db, LAN_ID)?.facility_id).toBe('room-2');
     expect(listGateways(db)).toHaveLength(1);
@@ -66,6 +66,12 @@ describe('gateway registry', () => {
 
   it('returns null for an unknown gateway', () => {
     expect(getGateway(db, 'no-such-lan')).toBeNull();
+  });
+
+  it('accepts only Ed25519 public keys for attestation verification', () => {
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    expect(isValidPublicKeyPem(publicKeyPem)).toBe(true);
+    expect(isValidPublicKeyPem(rsa.publicKey.export({ type: 'spki', format: 'pem' }).toString())).toBe(false);
   });
 });
 
@@ -106,7 +112,7 @@ describe('attendance persistence', () => {
 
 describe('processCheckin — full flow', () => {
   it('records a walk-in (no reservation) for a valid attestation', () => {
-    const result = processCheckin(db, sign(makePayload()), USER);
+    const result = processCheckin(db, sign(makePayload()), { subjectUserId: USER });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.matchedReservation).toBeNull();
@@ -121,7 +127,7 @@ describe('processCheckin — full flow', () => {
       facilityId: FACILITY, ownerUserId: USER,
       startAt: at - 60_000, endAt: at + 60_000, purpose: 'class', state: 'confirmed',
     });
-    const result = processCheckin(db, sign(makePayload({ issuedAt: at })), USER);
+    const result = processCheckin(db, sign(makePayload({ issuedAt: at })), { subjectUserId: USER });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.matchedReservation).toBe(reservation.id);
   });
@@ -132,42 +138,75 @@ describe('processCheckin — full flow', () => {
       facilityId: FACILITY, ownerUserId: USER,
       startAt: at - 60_000, endAt: at + 60_000, purpose: 'x', state: 'cancelled',
     });
-    const result = processCheckin(db, sign(makePayload({ issuedAt: at })), USER);
+    const result = processCheckin(db, sign(makePayload({ issuedAt: at })), { subjectUserId: USER });
     expect(result.ok && result.matchedReservation).toBeNull();
   });
 
   it('rejects when sub !== auth user (本人性)', () => {
-    const result = processCheckin(db, sign(makePayload({ sub: 'someone-else' })), USER);
+    const result = processCheckin(db, sign(makePayload({ sub: 'someone-else' })), { subjectUserId: USER });
     expect(result).toMatchObject({ ok: false, status: 403, code: 'SUBJECT_MISMATCH' });
   });
 
   it('rejects a stale attestation (> 120s, 鮮度)', () => {
     const old = makePayload({ issuedAt: Date.now() - 121_000 });
-    const result = processCheckin(db, sign(old), USER);
+    const result = processCheckin(db, sign(old), { subjectUserId: USER });
     expect(result).toMatchObject({ ok: false, status: 400, code: 'ATTESTATION_STALE' });
   });
 
   it('rejects replay (same nonce twice → 409)', () => {
     const payload = makePayload();
-    expect(processCheckin(db, sign(payload), USER).ok).toBe(true);
-    const second = processCheckin(db, sign(payload), USER);
+    expect(processCheckin(db, sign(payload), { subjectUserId: USER }).ok).toBe(true);
+    const second = processCheckin(db, sign(payload), { subjectUserId: USER });
     expect(second).toMatchObject({ ok: false, status: 409, code: 'REPLAY_DETECTED' });
   });
 
   it('rejects an unknown gateway (400)', () => {
-    const result = processCheckin(db, sign(makePayload({ lanId: 'ghost-lan' })), USER);
+    const result = processCheckin(db, sign(makePayload({ lanId: 'ghost-lan' })), { subjectUserId: USER });
     expect(result).toMatchObject({ ok: false, status: 400, code: 'UNKNOWN_GATEWAY' });
   });
 
   it('rejects a tampered signature (400)', () => {
     const other = generateKeyPairSync('ed25519');
     // 登録済とは別の鍵で署名 → 検証失敗
-    const result = processCheckin(db, sign(makePayload(), other.privateKey), USER);
+    const result = processCheckin(db, sign(makePayload(), other.privateKey), { subjectUserId: USER });
     expect(result).toMatchObject({ ok: false, status: 400, code: 'ATTESTATION_INVALID' });
   });
 
   it('rejects a malformed token (400)', () => {
-    const result = processCheckin(db, 'not-a-valid-token', USER);
+    const result = processCheckin(db, 'not-a-valid-token', { subjectUserId: USER });
     expect(result).toMatchObject({ ok: false, status: 400, code: 'ATTESTATION_MALFORMED' });
+  });
+
+  it('allows an authorized gateway to check in the attested subject without a browser token', () => {
+    const result = processCheckin(db, sign(makePayload({ method: 'face', assurance: 'high' })), { gatewayLanId: LAN_ID });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects a gateway token used for another registered LAN', () => {
+    const result = processCheckin(db, sign(makePayload()), { gatewayLanId: 'other-lan' });
+    expect(result).toMatchObject({ ok: false, status: 403, code: 'GATEWAY_MISMATCH' });
+  });
+
+  it('rejects an attestation for a facility other than the gateway registration', () => {
+    const result = processCheckin(db, sign(makePayload({ placeId: 'room-202' })), { gatewayLanId: LAN_ID });
+    expect(result).toMatchObject({ ok: false, status: 403, code: 'GATEWAY_FACILITY_MISMATCH' });
+  });
+
+  it('accepts legacy attestations as passkey/medium defaults', () => {
+    const result = processCheckin(db, sign(makePayload()), { subjectUserId: USER });
+    expect(result.ok).toBe(true);
+    expect(listAttendanceForUser(db, USER)[0]).toMatchObject({ method: 'passkey', assurance: 'medium' });
+  });
+
+  it('rejects low assurance unless explicitly enabled', () => {
+    const previous = process.env.CHECKIN_MIN_ASSURANCE;
+    delete process.env.CHECKIN_MIN_ASSURANCE;
+    const rejected = processCheckin(db, sign(makePayload({ method: 'session', assurance: 'low' })), { subjectUserId: USER });
+    process.env.CHECKIN_MIN_ASSURANCE = 'low';
+    const accepted = processCheckin(db, sign(makePayload({ method: 'session', assurance: 'low' })), { subjectUserId: USER });
+    if (previous === undefined) delete process.env.CHECKIN_MIN_ASSURANCE;
+    else process.env.CHECKIN_MIN_ASSURANCE = previous;
+    expect(rejected).toMatchObject({ ok: false, code: 'ASSURANCE_TOO_LOW' });
+    expect(accepted.ok).toBe(true);
   });
 });

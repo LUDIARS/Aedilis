@@ -11,6 +11,8 @@ Aedilis は **Web サービス（予約）** 種別。重視点は予約の重�
 | [`../../test/db.test.ts`](../../test/db.test.ts) | DB CRUD・重複検知（in-memory SQLite） |
 | [`../../test/facility-source.test.ts`](../../test/facility-source.test.ts) | FacilitySource（ローカル JSON）の解決 |
 | [`../../test/routes.test.ts`](../../test/routes.test.ts) | ルートの認可（auth 経路） |
+| [`../../test/checkin.test.ts`](../../test/checkin.test.ts) | attestation の署名・再送・assurance ポリシー |
+| [`../../test/checkin-gateway-routes.test.ts`](../../test/checkin-gateway-routes.test.ts) | kiosk gateway token と件数サマリー経路 |
 
 CI（`.github/workflows/test.yml`）で typecheck + build:web + test を実行。
 

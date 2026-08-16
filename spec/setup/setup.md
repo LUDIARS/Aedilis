@@ -17,6 +17,8 @@ npm run dev    # tsx watch。public/app.js を build してから起動
 | `AEDILIS_PORT` | 任意（既定 17502） | listen ポート |
 | `AEDILIS_ADMIN_IDS` | 任意 | admin 操作を許す Cernere user id（カンマ区切り） |
 | `AEDILIS_DATA` | 任意 | SQLite データの場所 |
+| `CHECKIN_MIN_ASSURANCE` | 任意 | 出席で受理する最低 assurance（既定 `medium`、`low` は明示設定時のみ） |
+| `CHECKIN_PASSKEY_STREAK_WARN` | 任意 | passkey のみの連続利用を管理一覧で注意表示する日数（既定 `5`） |
 
 > 出席チェックインを本番配線するときは、WebAuthn の RP ID / origin を
 > Cernere / Ostiarius と同一 eTLD+1 に揃える必要がある。横断 env 配線は

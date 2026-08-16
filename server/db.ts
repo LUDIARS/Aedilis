@@ -47,6 +47,7 @@ export interface GatewayRegistryRow {
   public_key_pem: string;
   facility_id: string;
   label: string;
+  token_hash: string;
   created_at: number;
 }
 
@@ -58,7 +59,19 @@ export interface AttendanceRow {
   checked_in_at: number;
   reservation_id: string | null;
   nonce: string;
+  method: CheckinMethod;
+  assurance: CheckinAssurance;
   created_at: number;
+}
+
+export type CheckinMethod = 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password';
+export type CheckinAssurance = 'high' | 'medium' | 'manual' | 'low';
+
+export interface CheckinEventSummaryRow {
+  id: string;
+  lan_id: string;
+  counts_json: string;
+  received_at: number;
 }
 
 export function openDb(dbPath: string): Database.Database {
@@ -107,6 +120,7 @@ export function openDb(dbPath: string): Database.Database {
       public_key_pem TEXT NOT NULL,
       facility_id    TEXT NOT NULL,
       label          TEXT NOT NULL DEFAULT '',
+      token_hash     TEXT NOT NULL DEFAULT '',
       created_at     INTEGER NOT NULL
     );
 
@@ -118,13 +132,39 @@ export function openDb(dbPath: string): Database.Database {
       checked_in_at  INTEGER NOT NULL,
       reservation_id TEXT,
       nonce          TEXT NOT NULL,
+      method         TEXT NOT NULL DEFAULT 'passkey',
+      assurance      TEXT NOT NULL DEFAULT 'medium',
       created_at     INTEGER NOT NULL
     );
     -- 新規テーブルなので INDEX を同 exec に置いてよい (既存 DB の no such column は起きない)。
     CREATE UNIQUE INDEX IF NOT EXISTS attendance_nonce ON attendance(nonce);
     CREATE INDEX IF NOT EXISTS attendance_user ON attendance(user_id, checked_in_at);
+
+    CREATE TABLE IF NOT EXISTS checkin_event_summary (
+      id           TEXT PRIMARY KEY,
+      lan_id       TEXT NOT NULL,
+      counts_json  TEXT NOT NULL,
+      received_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS checkin_event_summary_gateway
+      ON checkin_event_summary(lan_id, received_at);
   `);
+  addColumnIfMissing(db, 'gateway_registry', 'token_hash', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'attendance', 'method', "TEXT NOT NULL DEFAULT 'passkey'");
+  addColumnIfMissing(db, 'attendance', 'assurance', "TEXT NOT NULL DEFAULT 'medium'");
   return db;
+}
+
+function addColumnIfMissing(
+  db: Database.Database,
+  table: 'gateway_registry' | 'attendance',
+  column: string,
+  definition: string,
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 // ── Facility cache ─────────────────────────────────────────────────────────
@@ -355,17 +395,24 @@ export function getUserDisplay(
 /** 会場ゲートウェイの公開鍵を upsert (lan_id が PK)。 created_at は初回のみ。 */
 export function upsertGateway(
   db: Database.Database,
-  args: { lanId: string; publicKeyPem: string; facilityId: string; label?: string },
+  args: { lanId: string; publicKeyPem: string; facilityId: string; label?: string; tokenHash: string },
 ): GatewayRegistryRow {
   db.prepare(
-    `INSERT INTO gateway_registry (lan_id, public_key_pem, facility_id, label, created_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO gateway_registry (lan_id, public_key_pem, facility_id, label, token_hash, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(lan_id) DO UPDATE SET
        public_key_pem = excluded.public_key_pem,
        facility_id    = excluded.facility_id,
-       label          = excluded.label`,
-  ).run(args.lanId, args.publicKeyPem, args.facilityId, args.label ?? '', Date.now());
+       label          = excluded.label,
+       token_hash     = excluded.token_hash`,
+  ).run(args.lanId, args.publicKeyPem, args.facilityId, args.label ?? '', args.tokenHash, Date.now());
   return getGateway(db, args.lanId) as GatewayRegistryRow;
+}
+
+export function getGatewayByTokenHash(db: Database.Database, tokenHash: string): GatewayRegistryRow | null {
+  return db
+    .prepare<[string], GatewayRegistryRow>('SELECT * FROM gateway_registry WHERE token_hash = ?')
+    .get(tokenHash) ?? null;
 }
 
 export function getGateway(
@@ -404,14 +451,16 @@ export function insertAttendance(
     checkedInAt: number;
     reservationId: string | null;
     nonce: string;
+    method?: CheckinMethod;
+    assurance?: CheckinAssurance;
   },
 ): AttendanceRow | 'duplicate' {
   const id = randomUUID();
   try {
     db.prepare(
       `INSERT INTO attendance
-         (id, user_id, facility_id, lan_id, checked_in_at, reservation_id, nonce, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, user_id, facility_id, lan_id, checked_in_at, reservation_id, nonce, method, assurance, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       args.userId,
@@ -420,6 +469,8 @@ export function insertAttendance(
       args.checkedInAt,
       args.reservationId,
       args.nonce,
+      args.method ?? 'passkey',
+      args.assurance ?? 'medium',
       Date.now(),
     );
   } catch (e) {
@@ -431,6 +482,57 @@ export function insertAttendance(
   return db
     .prepare<[string], AttendanceRow>(`SELECT * FROM attendance WHERE id = ?`)
     .get(id) as AttendanceRow;
+}
+
+export function insertCheckinEventSummary(
+  db: Database.Database,
+  args: { lanId: string; counts: Readonly<Record<string, number>>; receivedAt: number },
+): CheckinEventSummaryRow {
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO checkin_event_summary (id, lan_id, counts_json, received_at) VALUES (?, ?, ?, ?)`,
+  ).run(id, args.lanId, JSON.stringify(args.counts), args.receivedAt);
+  return db.prepare<[string], CheckinEventSummaryRow>('SELECT * FROM checkin_event_summary WHERE id = ?').get(id) as CheckinEventSummaryRow;
+}
+
+export interface AttendancePolicySummary {
+  staffOverrideCount: number;
+  passkeyOnlyStreakUsers: Array<{ userId: string; days: number }>;
+}
+
+export function getAttendancePolicySummary(db: Database.Database, streakThreshold: number): AttendancePolicySummary {
+  const staffOverrideCount = (db.prepare("SELECT COUNT(*) AS count FROM attendance WHERE method = 'staff_override'").get() as { count: number }).count;
+  const rows = db.prepare<[], Pick<AttendanceRow, 'user_id' | 'checked_in_at' | 'method'>>(
+    'SELECT user_id, checked_in_at, method FROM attendance ORDER BY user_id, checked_in_at DESC',
+  ).all();
+  const methodsByUserDay = new Map<string, Map<string, Set<CheckinMethod>>>();
+  for (const row of rows) {
+    const date = new Date(row.checked_in_at).toISOString().slice(0, 10);
+    const byDay = methodsByUserDay.get(row.user_id) ?? new Map<string, Set<CheckinMethod>>();
+    const methods = byDay.get(date) ?? new Set<CheckinMethod>();
+    methods.add(row.method);
+    byDay.set(date, methods);
+    methodsByUserDay.set(row.user_id, byDay);
+  }
+  const passkeyOnlyStreakUsers: Array<{ userId: string; days: number }> = [];
+  for (const [userId, byDay] of methodsByUserDay) {
+    const passkeyDays = [...byDay.entries()]
+      .filter(([, methods]) => methods.size === 1 && methods.has('passkey'))
+      .map(([date]) => date)
+      .sort()
+      .reverse();
+    let longest = 0;
+    let current = 0;
+    let previous: number | undefined;
+    for (const date of passkeyDays) {
+      const day = Date.parse(`${date}T00:00:00.000Z`);
+      current = previous === undefined || previous - day === 86_400_000 ? current + 1 : 1;
+      longest = Math.max(longest, current);
+      previous = day;
+    }
+    if (longest >= streakThreshold) passkeyOnlyStreakUsers.push({ userId, days: longest });
+  }
+  return { staffOverrideCount, passkeyOnlyStreakUsers };
 }
 
 export function listAttendanceForUser(

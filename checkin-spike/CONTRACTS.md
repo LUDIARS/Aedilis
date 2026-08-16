@@ -22,10 +22,15 @@ interface AttestationPayload {
   lanId: string;      // 発行ゲートウェイ ID (Aedilis が公開鍵を引くキー)
   nonce: string;      // 検証に使った challenge (base64url)。replay 検出用
   issuedAt: number;   // epoch ms。出席時刻の正本 (ゲートウェイ時計)
+  method?: 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password';
+  assurance?: 'high' | 'medium' | 'manual' | 'low';
 }
 ```
 - 署名鍵 = ゲートウェイの永続 Ed25519 秘密鍵。
 - 検証鍵 = Aedilis が `lanId` で引くゲートウェイ公開鍵 (SPKI PEM)。
+- Aedilis は `placeId` が `gateway_registry[lanId].facility_id` と一致する attestation だけを受理する。
+- `method` / `assurance` は payload 末尾に追加する。旧 5 フィールドのみの attestation は
+  `passkey` / `medium` として受理する。
 
 ## 2. Cernere — passkey 公開鍵 export (新規エンドポイント)
 
@@ -104,8 +109,13 @@ CREATE INDEX IF NOT EXISTS attendance_user ON attendance(user_id, checked_in_at)
   5. **予約照合**: 同 `userId` × `facilityId` で `checked_in_at` を含む confirmed reservation を検索 → あれば `reservation_id` 紐付け。無ければ walk-in (reservation_id=null)。
   6. attendance 記録 → Memoria webhook を fire-and-forget (§5) → `{ ok, attendanceId, matchedReservation }`。
 - `GET /api/checkin/mine` (requireAuth) → 自分の出席一覧。
-- `GET /api/checkin?facility=&from=&to=` (requireAdmin) → 出席一覧。
+- `POST /api/checkin/gateway-verify` body `{ attestation }` → Ostiarius kiosk が直接送信する経路。
+  `Authorization: Bearer <gateway token>` と、その token に紐付く gateway の署名を必須とする。
+- `POST /api/checkin/events-summary` body `{ counts: Record<string, number> }` → 同じ gateway token で
+  Ostiarius outbox の件数のみを保存する。
+- `GET /api/checkin?facility=&from=&to=` (requireAdmin) → 出席一覧と staff override 件数・passkey 連続利用注意。
 - `POST /api/admin/gateways` (requireAdmin) body `{ lanId, publicKeyPem, facilityId, label? }` → gateway_registry upsert。
+  応答の `gatewayToken` は登録時だけ返し、以後はハッシュのみを保存する。
 - `GET /api/admin/gateways` (requireAdmin) → 一覧。
 
 ### PWA (`public/` に check-in 画面)

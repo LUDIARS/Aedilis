@@ -6,6 +6,7 @@
 // (Aedilis は cloud = 検証専用なので sign は持たない)。
 
 import { createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
+import type { CheckinAssurance, CheckinMethod } from '../db.ts';
 
 export interface AttestationPayload {
   /** Cernere user id (assertion で確定した本人)。 */
@@ -18,6 +19,9 @@ export interface AttestationPayload {
   nonce: string;
   /** epoch ms。 出席時刻の正本 (ゲートウェイ時計)。 */
   issuedAt: number;
+  /** Ostiarius P3 additions. Omitted by legacy attestations. */
+  method?: CheckinMethod;
+  assurance?: CheckinAssurance;
 }
 
 export function b64urlEncode(buf: Buffer): string {
@@ -36,12 +40,20 @@ export function b64urlDecode(s: string): Buffer {
 function isPayload(o: unknown): o is AttestationPayload {
   if (!o || typeof o !== 'object') return false;
   const p = o as Record<string, unknown>;
+  const hasValidMethod = p.method === undefined || (
+    typeof p.method === 'string' && ['face', 'face_passive', 'passkey', 'staff_override', 'session', 'password'].includes(p.method)
+  );
+  const hasValidAssurance = p.assurance === undefined || (
+    typeof p.assurance === 'string' && ['high', 'medium', 'manual', 'low'].includes(p.assurance)
+  );
   return (
     typeof p.sub === 'string' &&
     typeof p.placeId === 'string' &&
     typeof p.lanId === 'string' &&
     typeof p.nonce === 'string' &&
-    typeof p.issuedAt === 'number'
+    typeof p.issuedAt === 'number' &&
+    hasValidMethod &&
+    hasValidAssurance
   );
 }
 
@@ -94,8 +106,7 @@ export function verifyAttestationWithPem(
 /** PEM が Ed25519 公開鍵として読めるか (gateway 登録時の検証用)。 */
 export function isValidPublicKeyPem(pem: string): boolean {
   try {
-    createPublicKey({ key: pem, format: 'pem' });
-    return true;
+    return createPublicKey({ key: pem, format: 'pem' }).asymmetricKeyType === 'ed25519';
   } catch {
     return false;
   }
