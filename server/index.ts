@@ -56,12 +56,12 @@ const FACILITIES_PATH = resolve(
 const CERNERE_BASE_URL = requireEnv('CERNERE_BASE_URL');
 const AUDIENCE = requireEnv('AEDILIS_PUBLIC_URL');
 
-// Aedilis 自身の Cernere "aedilis" project 登録用資格情報 (Excubitor catalog が
-// Cernere の Infisical project からクロスサービス secret-broker 経由で配る)。
-// 値が本当に Infisical へ投入されるのは別 (運用) タスクだが、 コード側は
-// fail-fast で扱う — 未設定を黙ってスキップしない (CLAUDE.md の暗黙 fallback 禁止)。
-const CERNERE_CLIENT_ID = requireEnv('AEDILIS_CERNERE_CLIENT_ID');
-const CERNERE_CLIENT_SECRET = requireEnv('AEDILIS_CERNERE_CLIENT_SECRET');
+// Aedilis 自身の Cernere "aedilis" project 登録用資格情報。 Excubitor が起動のたびに
+// Cernere へ発行させ (catalog の cernere_launch_credentials)、 子 env へ注入する。
+// 固定の長命トークンを Infisical に置かないための方式で、 GLAB / Volputas と同じ。
+// 未設定を黙ってスキップしない (CLAUDE.md の暗黙 fallback 禁止) — fail-fast で扱う。
+const CERNERE_CLIENT_ID = requireEnv('CERNERE_PROJECT_CLIENT_ID');
+const CERNERE_CLIENT_SECRET = requireEnv('CERNERE_PROJECT_CLIENT_SECRET');
 
 const ADMIN_IDS = new Set(
   (process.env.AEDILIS_ADMIN_IDS ?? '')

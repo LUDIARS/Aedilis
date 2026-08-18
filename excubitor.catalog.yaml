@@ -15,15 +15,25 @@ services:
     cwd: ${ARS_ROOT}/Aedilis
     command: npm run dev
     allow_hot_reload: true
+    # 起動時に Cernere で credential を発行するため、Cernere が先に居る必要がある。
+    # CERNERE_BASE_URL も Cernere の provides から topology 経由で届く。
+    depends_on: [cernere]
     autostart: false
     health:
       type: tcp
       interval_sec: 30
+    required_env: [CERNERE_BASE_URL]
     provides:
       AEDILIS_URL: http://${host}:${port}
       AEDILIS_BASE_URL: http://${host}:${port}
-    # Cernere (認証/ID) 発行のクライアント資格情報を Excubitor 経由で借りる (cross-service delegation)。
-    # AEDILIS_CERNERE_CLIENT_ID/SECRET が Cernere の Infisical project に無ければ preflight が fail closed する。
+    # Excubitor 自身の issuer 資格情報。 Cernere の Infisical project から
+    # cross-service secret-broker 経由で解決する。 無ければ preflight が fail closed する。
     requires_secret:
       - service: cernere
-        keys: [AEDILIS_CERNERE_CLIENT_ID, AEDILIS_CERNERE_CLIENT_SECRET]
+        keys: [EXCUBITOR_CERNERE_CLIENT_ID, EXCUBITOR_CERNERE_CLIENT_SECRET]
+    # 起動単位の project client credential を Cernere に発行させる (GLAB / Volputas と同方式)。
+    # Excubitor が POST /api/auth/project-launch-credential を叩き、子 env へ
+    # CERNERE_PROJECT_CLIENT_ID / CERNERE_PROJECT_CLIENT_SECRET / CORPUS_ADMIN_IDS を注入し、
+    # issuer 資格情報は子へ渡さない。 固定の長命トークンを Infisical に置かずに済む。
+    cernere_launch_credentials:
+      target_project: aedilis

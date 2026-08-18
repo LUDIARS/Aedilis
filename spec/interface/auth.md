@@ -3,7 +3,10 @@
 ## 認証（Cernere SSO）
 - `/api/*` は **Cernere PASETO V4** で認証（公開鍵を fetch してローカル検証、
   [`../../server/auth.ts`](../../server/auth.ts)）。
-- 必須 env: `CERNERE_BASE_URL`（鍵 fetch 先）、`AEDILIS_PUBLIC_URL`。
+- 必須 env: `CERNERE_BASE_URL`（鍵 fetch 先）、`AEDILIS_PUBLIC_URL`、
+  `CERNERE_PROJECT_CLIENT_ID`、`CERNERE_PROJECT_CLIENT_SECRET`。後者 2 つは
+  Cernere のプロジェクト API（学生プロフィール読み取り）用で、Excubitor 起動時は
+  Cernere が都度発行して子プロセスへ注入する。
 - 個人データは Cernere 単一情報源。Aedilis は `owner_user_id` + 表示名キャッシュ
   （`user_display_cache`）のみ保持。
 

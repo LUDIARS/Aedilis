@@ -59,7 +59,11 @@ npm install
 npm run dev        # tsx watch、 public/app.js を build してから起動
 ```
 
-必須 env: `CERNERE_BASE_URL`、 `AEDILIS_PUBLIC_URL`。
+必須 env: `CERNERE_BASE_URL`、 `AEDILIS_PUBLIC_URL`、
+`CERNERE_PROJECT_CLIENT_ID`、`CERNERE_PROJECT_CLIENT_SECRET`。
+後者 2 つは Excubitor 起動時に Cernere が都度発行して子プロセスへ注入する。
+Excubitor を介さず直接起動する場合は、同等の短期プロジェクト資格情報を環境変数で
+明示的に与える必要がある（Infisical に固定の長期資格情報を保存しない）。
 任意: `AEDILIS_PORT` (既定 17502)、 `AEDILIS_ADMIN_IDS`、 `AEDILIS_DATA`、
 `AEDILIS_FACILITIES` (施設マスタ JSON のパス、 既定はリポ直下 `facilities.json`)。
 

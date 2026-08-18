@@ -14,6 +14,8 @@ npm run dev    # tsx watch。public/app.js を build してから起動
 |---|---|---|
 | `CERNERE_BASE_URL` | 必須 | Cernere（公開鍵 fetch / SSO）のベース URL |
 | `AEDILIS_PUBLIC_URL` | 必須 | 自身の公開 URL（manifest / リダイレクト） |
+| `CERNERE_PROJECT_CLIENT_ID` | 必須 | Cernere プロジェクト API の短期 client ID。Excubitor 起動時に注入される |
+| `CERNERE_PROJECT_CLIENT_SECRET` | 必須 | Cernere プロジェクト API の短期 client secret。Excubitor 起動時に注入される |
 | `AEDILIS_PORT` | 任意（既定 17502） | listen ポート |
 | `AEDILIS_ADMIN_IDS` | 任意 | admin 操作を許す Cernere user id（カンマ区切り） |
 | `AEDILIS_DATA` | 任意 | SQLite データの場所 |
@@ -23,6 +25,9 @@ npm run dev    # tsx watch。public/app.js を build してから起動
 > 出席チェックインを本番配線するときは、WebAuthn の RP ID / origin を
 > Cernere / Ostiarius と同一 eTLD+1 に揃える必要がある。横断 env 配線は
 > [`./webauthn-rp-id.md`](./webauthn-rp-id.md) を参照。
+
+> `CERNERE_PROJECT_CLIENT_*` は Infisical に固定値として保存しない。Excubitor を
+> 介さない直接起動では、Cernere が発行した短期資格情報を環境変数で明示的に渡す。
 
 ## ポート
 - `17502`（LUDIARS loopback レンジ）。17500 は Dropbox squat、17501 は Bibliotheca。
