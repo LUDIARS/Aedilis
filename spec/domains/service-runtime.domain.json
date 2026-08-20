@@ -1,0 +1,11 @@
+{
+  "name": "service-runtime",
+  "description": "プロセスとしての Aedilis。 起動と配線。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/(?:index|bootstrap)\\.ts$"
+    }
+  ]
+}

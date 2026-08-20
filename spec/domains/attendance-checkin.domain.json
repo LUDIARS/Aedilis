@@ -1,0 +1,29 @@
+{
+  "name": "attendance-checkin",
+  "description": "出席チェックインの中核: Ostiarius が署名した presence-attestation を gateway_registry の公開鍵で検証し (生徒本人 token 経路 /api/checkin/verify と kiosk 直送の gateway-verify 経路)、鮮度・重複・assurance ポリシーを判定して attendance に記録し、予約と突き合わせる。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/checkin/[^/]+\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)server/routes/checkin\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)server/db\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)test/checkin[^/]*\\.test\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)checkin-spike/CONTRACTS\\.md$"
+    }
+  ],
+  "cardTemplate": "Summarise the \"attendance-checkin\" domain: attestation 検証 (本人 token 経路 / gateway 経路) → assurance ポリシー → attendance 記録。",
+  "specRefs": [
+    "checkin-spike/CONTRACTS.md §1 Attestation / §4 Aedilis",
+    "Ostiarius spec/feature/identity-verification.md §4 §6"
+  ],
+  "rationale": "attestation 検証・記録・gateway 認可は 1 つの入出力レッグ。Revisor の target-domain ゲート用に server/checkin と routes/checkin、db、対応テストを 1 ドメインにまとめる。"
+}

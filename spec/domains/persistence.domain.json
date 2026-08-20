@@ -1,0 +1,17 @@
+{
+  "name": "persistence",
+  "description": "永続化。 スキーマと接続、 共有ユーティリティ。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/db\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)server/lib/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)lib/(?:.*/)?[^/]+$"
+    }
+  ]
+}

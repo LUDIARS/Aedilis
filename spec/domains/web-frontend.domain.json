@@ -1,0 +1,11 @@
+{
+  "name": "web-frontend",
+  "description": "ブラウザ側の画面。 施設と予約の表示・操作。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)public/(?:.*/)?[^/]+$"
+    }
+  ]
+}

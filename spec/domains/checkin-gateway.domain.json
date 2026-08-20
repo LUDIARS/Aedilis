@@ -1,0 +1,14 @@
+{
+  "name": "checkin-gateway",
+  "description": "来場のチェックイン。 ゲートウェイ登録と attestation 検証の受口。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/checkin/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)checkin-spike/(?:.*/)?[^/]+$"
+    }
+  ]
+}

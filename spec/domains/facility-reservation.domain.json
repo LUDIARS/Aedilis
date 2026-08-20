@@ -1,0 +1,14 @@
+{
+  "name": "facility-reservation",
+  "description": "施設と予約。 施設定義、 空き状況、 予約の受付と取り消し。 Aedilis の中心。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/facility/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)server/routes/(?:facilities|reservations)\\.ts$"
+    }
+  ]
+}

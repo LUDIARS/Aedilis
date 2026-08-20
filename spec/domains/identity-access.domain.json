@@ -1,0 +1,14 @@
+{
+  "name": "identity-access",
+  "description": "Cernere を情報源とする認証と権限。 launch credential の取り扱い。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)server/auth\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)server/corpus\\.ts$"
+    }
+  ]
+}
