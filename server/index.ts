@@ -136,6 +136,10 @@ app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 app.route('/api', makeCheckinRouter(db, cernereProjectClient));
 
 // serveStatic は cwd 相対なので、 npm scripts は repo root から起動する前提。
+for (const path of ['/checkin.html', '/checkin.js']) app.use(path, async (c, next) => {
+  c.header('Cache-Control', 'no-store');
+  await next();
+});
 app.route('/', meetingPages());
 app.use('/*', serveStatic({ root: './public' }));
 app.get('/', serveStatic({ path: './public/index.html' }));

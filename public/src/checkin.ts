@@ -3,8 +3,8 @@
 // フロー:
 //   1. POST {gateway}/checkin/begin          → WebAuthn options (challenge=nonce)
 //   2. startAuthentication(options)           → passkey で署名 (生体ゲート)
-//   3. POST {gateway}/checkin/finish {response} → ゲートウェイが attestation 署名
-//   4. POST /api/checkin/verify {attestation} → Aedilis (Cernere cookie/Bearer)
+//   3. POST {gateway}/checkin/finish {response} → Os が署名して Ae に出席を送信
+//   4. Os が返した出席記録結果を確認 (ブラウザから再送しない)
 //   5. 結果表示 + 自分の出席履歴を更新
 //
 // ゲートウェイ URL は会場 LAN アドレス。 /api/health の defaultGatewayUrl を
@@ -111,19 +111,16 @@ async function doCheckin(): Promise<void> {
     setStatus('(2) passkey で署名中 (生体認証)…', '');
     const assertion = await startAuthentication({ optionsJSON: options as never });
 
-    setStatus('(3) ゲートウェイがオフライン検証 → attestation 署名中…', '');
-    const finish = await gatewayPost<{ ok?: boolean; attestation?: string }>(
+    setStatus('(3) 会場で本人確認し、出席を記録中…', '');
+    const finish = await gatewayPost<{ ok?: boolean; attendance?: { status: string; attendanceId?: string; matchedReservation?: string | null } }>(
       gw,
       '/checkin/finish',
       { response: assertion },
     );
-    if (!finish.attestation) throw new Error('ゲートウェイが attestation を返しませんでした');
-
-    setStatus('(4) Aedilis へリレー → 検証 → 出席記録中…', '');
-    const result = await aedilis<{ ok: boolean; attendanceId: string; matchedReservation: string | null }>(
-      '/api/checkin/verify',
-      { method: 'POST', body: JSON.stringify({ attestation: finish.attestation }) },
-    );
+    const result = finish.attendance;
+    if (finish.ok !== true || result?.status !== 'recorded' || !result.attendanceId) {
+      throw new Error('出席記録を確認できませんでした。ゲートウェイの更新・接続設定を管理者に確認してください。');
+    }
     setStatus(
       result.matchedReservation
         ? '✅ 出席を記録しました (予約と照合)'
