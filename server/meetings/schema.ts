@@ -35,4 +35,8 @@ export function migrateMeetings(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS meeting_outbox_due ON meeting_outbox(status, due_at);
   `);
+  const columns = db.prepare('PRAGMA table_info(meeting_poll)').all() as { name: string }[];
+  if (!columns.some(column => column.name === 'online_allowed')) {
+    db.exec('ALTER TABLE meeting_poll ADD COLUMN online_allowed INTEGER NOT NULL DEFAULT 0 CHECK (online_allowed IN (0,1))');
+  }
 }

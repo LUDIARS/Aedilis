@@ -50,7 +50,7 @@ async function main(): Promise<void> {
         const input = readEditor();
         if (editing && meeting) await request(`/${meeting.id}`, 'PATCH', { ...input, revision: meeting.revision });
         else {
-          const result = await request<{ id: string }>('/', 'POST', input);
+          const result = await request<{ id: string }>('', 'POST', input);
           history.pushState(null, '', `/meetings?meeting=${encodeURIComponent(result.id)}`);
         }
         await reload(); status('保存しました。共有URLを参加者に送ってください');

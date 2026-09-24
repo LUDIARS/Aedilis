@@ -22,8 +22,8 @@ export class MeetingRepository {
   create(input: MeetingInput, actor: Actor): string {
     if (!actor.current) throw new MeetingError(401, 'ブラウザのCookieを有効にしてください');
     const id = randomUUID(), now = Date.now();
-    this.db.prepare(`INSERT INTO meeting_poll(id,owner_id,title,description,organizer_name,slots_json,venues_json,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?)`).run(id, actor.current.id, input.title, input.description, input.organizerName, JSON.stringify(input.slots), JSON.stringify(input.venues), now, now);
+    this.db.prepare(`INSERT INTO meeting_poll(id,owner_id,title,description,organizer_name,online_allowed,slots_json,venues_json,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(id, actor.current.id, input.title, input.description, input.organizerName, Number(input.onlineAllowed), JSON.stringify(input.slots), JSON.stringify(input.venues), now, now);
     return id;
   }
   update(id: string, input: MeetingInput, expected: number, actor: Actor): void {
@@ -39,8 +39,8 @@ export class MeetingRepository {
         this.db.prepare('UPDATE meeting_response SET answers_json = ?, revision = revision + 1 WHERE id = ?').run(JSON.stringify(kept), answer.id);
       }
       // Any organizer edit reopens scheduling so a stale final choice cannot survive changes.
-      this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
-        .run(input.title, input.description, input.organizerName, JSON.stringify(input.slots), JSON.stringify(input.venues), Date.now(), id);
+      this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,online_allowed=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
+        .run(input.title, input.description, input.organizerName, Number(input.onlineAllowed), JSON.stringify(input.slots), JSON.stringify(input.venues), Date.now(), id);
       this.enqueue(id, 'meeting_changed', this.responses(id).map(r => r.owner_id), actor);
     })();
   }
@@ -114,7 +114,7 @@ export class MeetingRepository {
   view(id: string, actor: Actor): unknown {
     const row = this.get(id), mine = owns(actor, row.owner_id);
     return {
-      id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name,
+      id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1,
       slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
       selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,
       responses: this.responses(id).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),

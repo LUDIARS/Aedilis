@@ -55,6 +55,7 @@ export function importRanges(ranges: Range[], target: string): void {
 export function fillEditor(draft?: MeetingDraft): void {
   element<HTMLInputElement>('title').value = draft?.title || '';
   element<HTMLInputElement>('organizer').value = draft?.organizerName || '';
+  element<HTMLInputElement>('online-allowed').checked = draft?.onlineAllowed ?? false;
   element<HTMLTextAreaElement>('description').value = draft?.description || '';
   element('venues').replaceChildren(); element('slots').replaceChildren();
   for (const v of draft?.venues || []) addVenue(v);
@@ -69,5 +70,5 @@ export function readEditor(): MeetingDraft {
   const venues = [...element('venues').querySelectorAll<HTMLElement>('.venue-row')].map(row => ({
     name: input(row, '.venue-name').value.trim(), busy: [...row.querySelectorAll('.busy-row')].map(b => ({ startAt: iso(input(b, '.start').value), endAt: iso(input(b, '.end').value) })),
   }));
-  return { title: element<HTMLInputElement>('title').value, organizerName: element<HTMLInputElement>('organizer').value, description: element<HTMLTextAreaElement>('description').value, slots, venues };
+  return { title: element<HTMLInputElement>('title').value, organizerName: element<HTMLInputElement>('organizer').value, onlineAllowed: element<HTMLInputElement>('online-allowed').checked, description: element<HTMLTextAreaElement>('description').value, slots, venues };
 }

@@ -67,3 +67,12 @@ External contracts:
 - https://developers.google.com/workspace/calendar/api/v3/reference/events/list
 - https://docs.discord.com/developers/resources/user#create-dm
 - https://docs.discord.com/developers/resources/message#create-message
+# Online participation and creation routing (2026-09-24)
+
+The organizer separately sets `onlineAllowed` with an online-participation checkbox.
+The shared meeting page displays whether online attendance is allowed, independently
+of candidate venues. Existing meetings and older requests default to false.
+An additive, repeatable migration adds `meeting_poll.online_allowed`.
+Creation uses POST `/api/meetings` (no trailing slash), including requests through
+the frontend HTTP helper. The mounted-router regression covers anonymous creation,
+reload and editing online availability without changing the venue.

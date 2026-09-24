@@ -11,7 +11,7 @@ let db: Database.Database;
 let repo: MeetingRepository;
 let host: Actor, participant: Actor, stranger: Actor;
 const draft: MeetingInput = {
-  title: 'Meeting', description: '', organizerName: 'Host',
+  title: 'Meeting', description: '', organizerName: 'Host', onlineAllowed: false,
   slots: [{ id: 'slot-a', startAt: '2026-10-01T01:00:00.000Z', endAt: '2026-10-01T02:00:00.000Z', venue: 'Room' }],
   venues: [{ name: 'Room', busy: [] }],
 };

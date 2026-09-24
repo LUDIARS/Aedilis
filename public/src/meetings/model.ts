@@ -1,7 +1,7 @@
 export interface Range { startAt: string; endAt: string }
 export interface Slot extends Range { id: string; venue: string }
 export interface Venue { name: string; busy: Range[] }
-export interface MeetingDraft { title: string; description: string; organizerName: string; slots: Slot[]; venues: Venue[] }
+export interface MeetingDraft { title: string; description: string; organizerName: string; onlineAllowed: boolean; slots: Slot[]; venues: Venue[] }
 export interface Answer {
   id: string; name: string; comment: string; topic: string;
   answers: Record<string, 'yes' | 'maybe' | 'no'>; revision: number; canEdit: boolean;
@@ -11,12 +11,7 @@ export interface Meeting extends MeetingDraft {
   revision: number; canManage: boolean; responses: Answer[];
 }
 export interface Config { googleClientId: string; cernereUrl: string; discordEnabled: boolean }
-export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const res = await fetch(`/api/meetings${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const data = await res.json() as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || `通信に失敗しました (${res.status})`);
-  return data;
-}
+export { request } from './request.ts';
 export function element<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`Missing element: ${id}`);

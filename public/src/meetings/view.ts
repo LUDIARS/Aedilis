@@ -20,6 +20,7 @@ export function renderMeeting(meeting: Meeting, selectResponse: (answer: Answer)
   element('meeting-title').textContent = meeting.title;
   element('meeting-description').textContent = meeting.description;
   element('meeting-organizer').textContent = `主催：${meeting.organizerName}`;
+  element('meeting-online').textContent = meeting.onlineAllowed ? 'オンライン参加可' : 'オンライン参加不可';
   element('meeting-state').textContent = { open: '日程調整中', finalized: '開催日時が決まりました', cancelled: 'この会議は中止されました' }[meeting.state];
   element<HTMLInputElement>('share-url').value = location.href;
   element('manage').hidden = !meeting.canManage || meeting.state === 'cancelled';

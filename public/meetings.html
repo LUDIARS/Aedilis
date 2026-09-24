@@ -26,6 +26,7 @@
       <form id="meeting-form">
         <label>会議のタイトル<input id="title" maxlength="150" required placeholder="次の企画について話す会"></label>
         <label>主催者のお名前<input id="organizer" maxlength="80" required></label>
+        <label><input id="online-allowed" type="checkbox">オンライン参加可</label>
         <label>説明・参加者へのメッセージ<textarea id="description" maxlength="3000" rows="3"></textarea></label>
         <h2>会場と利用できない時間</h2><p>会場名だけでも登録できます。予約済みの時間があれば追加してください。</p>
         <div id="venues"></div><button id="add-venue" type="button">＋ 会場を追加</button>
@@ -42,7 +43,7 @@
       </form>
     </section>
     <section id="meeting" hidden>
-      <div class="meeting-heading"><p class="eyebrow" id="meeting-state"></p><h1 id="meeting-title"></h1><p id="meeting-description" class="multiline"></p><p id="meeting-organizer"></p></div>
+      <div class="meeting-heading"><p class="eyebrow" id="meeting-state"></p><h1 id="meeting-title"></h1><p id="meeting-description" class="multiline"></p><p id="meeting-organizer"></p><p id="meeting-online"></p></div>
       <div class="share card"><label>共有URL<input id="share-url" readonly></label><button id="copy-link">URLをコピー</button></div>
       <div id="manage" class="card" hidden><h2>主催者の操作</h2><p>会議の編集後は回答受付を再開します。変更された候補は再回答が必要になります。</p><div class="actions"><button id="edit-meeting">会議を編集</button><button id="cancel-meeting" class="danger">会議を中止</button></div><label>開催日時を決める<select id="final-slot"></select></label><button id="finalize" class="primary">この日時で確定</button></div>
       <section class="card"><h2>みんなの都合</h2><p id="final-choice"></p><div class="table-scroll" id="answer-table"></div></section>
