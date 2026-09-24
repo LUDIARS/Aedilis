@@ -1,6 +1,7 @@
 import { action, element, escape, request, status, type Answer, type Config, type Meeting } from './model.ts';
 import { addVenue, fillEditor, readEditor, setupDatePicker } from './editor.ts';
 import { setupGoogle } from './google.ts';
+import { setupManagedMeet, renderManagedMeet, refreshManagedAccount } from './managed-meet.ts';
 import { setupFacilities } from './facilities.ts';
 import { refreshAccount, setupAccount } from './account.ts';
 import { renderMeeting } from './view.ts';
@@ -12,6 +13,7 @@ let editing = false;
 function page(id: 'home' | 'editor' | 'meeting'): void { for (const name of ['home', 'editor', 'meeting']) element(name).hidden = name !== id; }
 function selectResponse(answer: Answer | undefined): void { response = answer; if (meeting) renderResponse(meeting, answer); }
 async function reload(): Promise<void> {
+  await refreshManagedAccount();
   const id = location.pathname.match(/^\/meeting\/([0-9a-f-]+)$/i)?.[1];
   if (!id) {
     meeting = null; page('home');
@@ -21,6 +23,7 @@ async function reload(): Promise<void> {
   }
   meeting = await request<Meeting>(`/${encodeURIComponent(id)}`);
   page('meeting'); renderMeeting(meeting, selectResponse);
+  await renderManagedMeet(meeting);
   selectResponse(meeting.responses.find(r => r.id === response?.id && r.canEdit) || meeting.responses.find(r => r.canEdit));
 }
 async function saveAnswer(): Promise<void> {
@@ -40,6 +43,7 @@ function editMeeting(isNew: boolean): void {
 async function main(): Promise<void> {
   const config = await request<Config>('/config');
   await refreshAccount(config); setupAccount(config, reload); setupGoogle(config);
+  await setupManagedMeet();
   await setupFacilities(addVenue);
   element('new-meeting').onclick = () => editMeeting(true);
   element('edit-meeting').onclick = () => editMeeting(false);

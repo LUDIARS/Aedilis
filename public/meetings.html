@@ -16,6 +16,7 @@
       <div class="actions"><button id="login" type="button">Cernereに登録・ログイン</button><button id="link" type="button" hidden>この端末の回答を引き継ぐ</button><button id="logout" type="button" hidden>ログアウト</button></div>
       <label id="notifications-label" hidden><input id="notifications" type="checkbox"> Discordで通知を受け取る</label>
       <p id="notification-help"></p><a id="cernere-profile" target="_blank" rel="noopener noreferrer" hidden>CernereでDiscord連携を設定</a>
+      <div><strong>Google Meet連携</strong><p id="meet-account-status"></p><div class="actions"><button type="button" id="meet-connect-creator" hidden>自分のGoogleアカウントを確認</button><button type="button" id="meet-connect-organizer" hidden>管理アカウントでGoogleを認可</button></div></div>
       <details id="delivery" hidden><summary>自分への通知状況</summary><button id="delivery-refresh" type="button">更新</button><button id="delivery-retry" type="button">失敗した通知を再送</button><ul id="delivery-list"></ul></details>
     </section>
     <section id="home">
@@ -49,6 +50,7 @@
     <section id="meeting" hidden>
       <div class="meeting-heading"><p class="eyebrow" id="meeting-state"></p><h1 id="meeting-title"></h1><p id="meeting-description" class="multiline"></p><p id="meeting-organizer"></p><p id="meeting-online"></p></div>
       <div class="share card"><label>共有URL<input id="share-url" readonly></label><button id="copy-link">URLをコピー</button></div>
+      <section id="managed-meet" class="card" hidden><h2>Google Meet</h2><p id="meet-result" role="status"></p><a id="meet-link" target="_blank" rel="noopener noreferrer" hidden>Meetに参加する</a><button id="meet-create" type="button" hidden>Google Meetを作成</button><p class="hint">文字起こしは主催者・共同主催者がWebから参加すると開始されます。参加者にはMeet上で通知されます。</p></section>
       <div id="manage" class="card" hidden><h2>主催者の操作</h2><p>会議の編集後は回答受付を再開します。変更された候補は再回答が必要になります。</p><div class="actions"><button id="edit-meeting">会議を編集</button><button id="cancel-meeting" class="danger">会議を中止</button></div><label>開催日時を決める<select id="final-slot"></select></label><button id="finalize" class="primary">この日時で確定</button></div>
       <section class="card"><h2>みんなの都合</h2><p id="final-choice"></p><div class="table-scroll" id="answer-table"></div></section>
       <section class="card"><h2>コメント・話したいこと</h2><div id="comments"></div></section>

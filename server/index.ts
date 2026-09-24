@@ -28,6 +28,9 @@ import { meetingConfig } from './meetings/config.ts';
 import { migrateMeetings } from './meetings/schema.ts';
 import { makeMeetingRouter } from './meetings/routes.ts';
 import { startMeetingOutbox } from './meetings/outbox.ts';
+import { meetConfig } from './meet/config.ts';
+import { migrateMeet } from './meet/schema.ts';
+import { managedMeetRoutes } from './meet/routes.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +81,7 @@ const ADMIN_IDS = new Set(
 const db = openDb(DB_PATH);
 const meetings = meetingConfig(AUDIENCE, CERNERE_BASE_URL);
 migrateMeetings(db);
+migrateMeet(db);
 startAuth({
   cernereBaseUrl: CERNERE_BASE_URL,
   audience: AUDIENCE,
@@ -127,6 +131,7 @@ app.get('/api/health', (c) =>
 app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
+app.route('/api/meet', managedMeetRoutes(db, cernereProjectClient, meetConfig(AUDIENCE)));
 app.route('/api/meetings', makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));

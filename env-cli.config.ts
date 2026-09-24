@@ -44,6 +44,7 @@ const config: EnvCliConfig = {
     AEDILIS_DEFAULT_GATEWAY_URL: "",
     // Optional meeting integrations. Secret value is injected by Infisical, never committed.
     AEDILIS_GOOGLE_CLIENT_ID: "",
+    AEDILIS_GOOGLE_CLIENT_SECRET: "",
     AEDILIS_CERNERE_PUBLIC_URL: "",
     AEDILIS_DISCORD_ENABLED: "false",
     AEDILIS_DISCORD_BOT_TOKEN: "",
