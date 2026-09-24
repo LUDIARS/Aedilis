@@ -22,6 +22,7 @@ services:
     autostart: false
     env:
       AEDILIS_PUBLIC_URL: https://ae.ai-run-do.com
+      AEDILIS_CERNERE_PUBLIC_URL: https://cr.ai-run-do.com
     health:
       type: tcp
       interval_sec: 30
