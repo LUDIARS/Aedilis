@@ -1,0 +1,12 @@
+{
+  "name": "meeting-scheduling",
+  "description": "Anonymous meeting proposals, participant responses, ownership, calendar import and notification delivery.",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    { "pathPattern": "(^|/)server/meetings/[^/]+$" },
+    { "pathPattern": "(^|/)public/src/meetings/[^/]+$" },
+    { "pathPattern": "(^|/)public/meetings\\.(html|css)$" },
+    { "pathPattern": "(^|/)test/meetings\\.test\\.ts$" }
+  ]
+}

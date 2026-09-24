@@ -271,7 +271,7 @@ export class CernereProjectClient {
   }
 
   /** module_request を送って module_response.payload を待つ。 未接続なら即 throw。 */
-  private request(moduleName: string, action: string, payload: Record<string, unknown>): Promise<unknown> {
+  request(moduleName: string, action: string, payload: Record<string, unknown>): Promise<unknown> {
     if (!this.ws || this.ws.readyState !== WS_OPEN) {
       return Promise.reject(new Error('cernere project WS is not connected'));
     }

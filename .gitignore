@@ -6,6 +6,8 @@ public/app.js
 public/app.js.map
 public/checkin.js
 public/checkin.js.map
+public/meetings.js
+public/meetings.js.map
 review/
 
 # ローカル依存ライブラリ (git submodule update --init でセットアップ)

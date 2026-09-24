@@ -23,6 +23,10 @@ import { makeReservationRouter } from './routes/reservations.ts';
 import { makeCheckinRouter } from './routes/checkin.ts';
 import { corpusManifest, CORPUS_MANIFEST_PATH } from './corpus.ts';
 import { createCernereProjectClient } from './lib/cernere-project-client.ts';
+import { meetingConfig } from './meetings/config.ts';
+import { migrateMeetings } from './meetings/schema.ts';
+import { makeMeetingRouter } from './meetings/routes.ts';
+import { startMeetingOutbox } from './meetings/outbox.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +75,8 @@ const ADMIN_IDS = new Set(
 );
 
 const db = openDb(DB_PATH);
+const meetings = meetingConfig(AUDIENCE, CERNERE_BASE_URL);
+migrateMeetings(db);
 startAuth({
   cernereBaseUrl: CERNERE_BASE_URL,
   audience: AUDIENCE,
@@ -86,6 +92,9 @@ const cernereProjectClient = createCernereProjectClient({
   clientSecret: CERNERE_CLIENT_SECRET,
 });
 cernereProjectClient.start();
+const stopMeetingOutbox = startMeetingOutbox(db, cernereProjectClient, meetings);
+process.once('SIGTERM', stopMeetingOutbox);
+process.once('SIGINT', stopMeetingOutbox);
 
 const facilitySource = new LocalFacilitySource(FACILITIES_PATH);
 
@@ -117,6 +126,7 @@ app.get('/api/health', (c) =>
 app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
+app.route('/api/meetings', makeMeetingRouter(db, meetings, cernereProjectClient));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 // 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。
@@ -125,6 +135,16 @@ app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 app.route('/api', makeCheckinRouter(db, cernereProjectClient));
 
 // serveStatic は cwd 相対なので、 npm scripts は repo root から起動する前提。
+app.use('/meetings', async (c, next) => {
+  c.header('Referrer-Policy', 'no-referrer');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Cache-Control', 'no-store');
+  await next();
+});
+app.get('/meetings', serveStatic({ path: './public/meetings.html' }));
+app.get('/meetings.html', (c) => c.redirect(`/meetings${new URL(c.req.url).search}`, 308));
+app.get('/meetings/', (c) => c.redirect(`/meetings${new URL(c.req.url).search}`, 308));
 app.use('/*', serveStatic({ root: './public' }));
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.notFound((c) => {

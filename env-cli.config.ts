@@ -42,6 +42,11 @@ const config: EnvCliConfig = {
     MEMORIA_WEBHOOK_URL: "",
     // PWA に pre-fill する既定の会場ゲートウェイ URL。 未設定なら画面入力。
     AEDILIS_DEFAULT_GATEWAY_URL: "",
+    // Optional meeting integrations. Secret value is injected by Infisical, never committed.
+    AEDILIS_GOOGLE_CLIENT_ID: "",
+    AEDILIS_CERNERE_PUBLIC_URL: "",
+    AEDILIS_DISCORD_ENABLED: "false",
+    AEDILIS_DISCORD_BOT_TOKEN: "",
   },
 
   secretsPath: ".env.secrets",

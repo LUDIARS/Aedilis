@@ -13,12 +13,15 @@ services:
     repo: LUDIARS/Aedilis
     runtime: node
     cwd: ${ARS_ROOT}/Aedilis
-    command: npm run dev
+    # Native Node root survives the Windows launcher; npm retains the predev build.
+    command: node --run dev:excubitor
     allow_hot_reload: true
     # 起動時に Cernere で credential を発行するため、Cernere が先に居る必要がある。
     # CERNERE_BASE_URL も Cernere の provides から topology 経由で届く。
     depends_on: [cernere]
     autostart: false
+    env:
+      AEDILIS_PUBLIC_URL: https://ae.ai-run-do.com
     health:
       type: tcp
       interval_sec: 30

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
+  <title>Aedilis — みんなの予定をひとつに</title>
+  <link rel="stylesheet" href="/meetings.css">
+</head>
+<body>
+  <header><a class="brand" href="/meetings">Aedilis <span>日程調整</span></a><a href="/">施設予約</a></header>
+  <main>
+    <div id="status" role="status" aria-live="polite"></div>
+    <section class="account card">
+      <div><strong id="identity">この端末で利用</strong><p id="identity-help">登録なしで使えます。Cookieを消すと編集できなくなるため、複数端末で使う方はCernereに登録してください。</p></div>
+      <div class="actions"><button id="login" type="button">Cernereに登録・ログイン</button><button id="link" type="button" hidden>この端末の回答を引き継ぐ</button><button id="logout" type="button" hidden>ログアウト</button></div>
+      <label id="notifications-label" hidden><input id="notifications" type="checkbox"> Discordで通知を受け取る</label>
+      <p id="notification-help"></p><a id="cernere-profile" target="_blank" rel="noopener noreferrer" hidden>CernereでDiscord連携を設定</a>
+      <details id="delivery" hidden><summary>自分への通知状況</summary><button id="delivery-refresh" type="button">更新</button><button id="delivery-retry" type="button">失敗した通知を再送</button><ul id="delivery-list"></ul></details>
+    </section>
+    <section id="home">
+      <div class="hero"><p class="eyebrow">MEET WITHOUT THE BACK-AND-FORTH</p><h1>みんなの予定を、<br>ひとつに。</h1><p>候補をつくって、URLを共有。<br>名前と都合を集めるだけの、気軽な会議調整。</p><button id="new-meeting" class="primary">日程調整をつくる</button></div>
+      <section class="card"><h2>自分の会議</h2><div id="mine"></div></section>
+    </section>
+    <section id="editor" class="card" hidden>
+      <p class="eyebrow">PLAN A MEETING</p><h1 id="editor-title">日程調整をつくる</h1>
+      <form id="meeting-form">
+        <label>会議のタイトル<input id="title" maxlength="150" required placeholder="次の企画について話す会"></label>
+        <label>主催者のお名前<input id="organizer" maxlength="80" required></label>
+        <label>説明・参加者へのメッセージ<textarea id="description" maxlength="3000" rows="3"></textarea></label>
+        <h2>会場と利用できない時間</h2><p>会場名だけでも登録できます。予約済みの時間があれば追加してください。</p>
+        <div id="venues"></div><button id="add-venue" type="button">＋ 会場を追加</button>
+        <h2>候補日時</h2><p>日時はこの端末のタイムゾーンで表示します。会場の予約確保は別途行ってください。</p>
+        <div id="slots"></div><button id="add-slot" type="button">＋ 候補を追加</button>
+        <details class="import"><summary>Googleカレンダーから読み込む</summary>
+          <p>選んだ予定だけを候補日時・会場の利用不可時間に取り込みます。Googleへの読み取り許可が必要です。</p>
+          <p id="google-help"></p><button id="google-connect" type="button">Googleカレンダーを選ぶ</button>
+          <div id="google-controls" hidden><label>カレンダー<select id="google-calendar"></select></label><div class="row"><label>期間の開始<input type="date" id="google-from"></label><label>期間の終了（この日まで）<input type="date" id="google-to"></label></div><button id="google-load" type="button">予定を表示</button>
+          <div id="google-events"></div><label>取り込み先<select id="google-target"><option value="slots">候補日時</option></select></label><button id="google-import" type="button">選択した予定を取り込む</button></div>
+        </details>
+        <p class="hint">会議URLを知っている人は、お名前・回答・コメント・話題を見ることができます。</p>
+        <div class="actions"><button class="primary" id="save-meeting" type="submit">作成して共有する</button><button id="cancel-editor" type="button">戻る</button></div>
+      </form>
+    </section>
+    <section id="meeting" hidden>
+      <div class="meeting-heading"><p class="eyebrow" id="meeting-state"></p><h1 id="meeting-title"></h1><p id="meeting-description" class="multiline"></p><p id="meeting-organizer"></p></div>
+      <div class="share card"><label>共有URL<input id="share-url" readonly></label><button id="copy-link">URLをコピー</button></div>
+      <div id="manage" class="card" hidden><h2>主催者の操作</h2><p>会議の編集後は回答受付を再開します。変更された候補は再回答が必要になります。</p><div class="actions"><button id="edit-meeting">会議を編集</button><button id="cancel-meeting" class="danger">会議を中止</button></div><label>開催日時を決める<select id="final-slot"></select></label><button id="finalize" class="primary">この日時で確定</button></div>
+      <section class="card"><h2>みんなの都合</h2><p id="final-choice"></p><div class="table-scroll" id="answer-table"></div></section>
+      <section class="card"><h2>コメント・話したいこと</h2><div id="comments"></div></section>
+      <section class="card" id="response-panel"><h2 id="response-title">あなたの都合を教えてください</h2><form id="response-form"><label>お名前<input id="response-name" maxlength="80" required></label><div id="response-slots"></div><label>コメント<textarea id="response-comment" maxlength="2000" rows="3"></textarea></label><label>話したいこと（任意）<textarea id="response-topic" maxlength="2000" rows="3"></textarea></label><div class="actions"><button id="save-response" class="primary">回答を保存</button><button id="delete-response" class="danger" type="button" hidden>自分の回答を削除</button></div></form></section>
+      <a href="/meetings">← 自分の会議に戻る</a>
+    </section>
+  </main>
+  <footer>予定を集めることから、集まることへ。<span>Aedilis</span></footer>
+  <script type="module" src="/meetings.js"></script>
+</body>
+</html>

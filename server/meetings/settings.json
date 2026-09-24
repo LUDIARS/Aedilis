@@ -1,0 +1,8 @@
+{
+  "googleClientId": "",
+  "cernerePublicUrl": "",
+  "discordEnabled": false,
+  "discordBotTokenSecret": "AEDILIS_DISCORD_BOT_TOKEN",
+  "notificationIntervalMs": 15000,
+  "notificationMaxAttempts": 8
+}

@@ -116,6 +116,17 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
+/** Optional identity for the public meeting surface. Invalid/expired tokens confer no rights. */
+export async function readIdentity(c: Context): Promise<AuthIdentity | null> {
+  try {
+    const token = extractToken(c);
+    return token ? await verifyToken(token) : null;
+  } catch {
+    // Malformed untrusted cookies are anonymous, never an authorization bypass.
+    return null;
+  }
+}
+
 export const requireAdmin: MiddlewareHandler = async (c, next) => {
   const id = c.get('auth') as AuthIdentity | undefined;
   if (!id) return c.json({ error: 'unauthorized' }, 401);
