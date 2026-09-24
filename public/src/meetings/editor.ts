@@ -1,11 +1,13 @@
 import { setupCalendar, renderCalendar, showCalendarMonth, defaultRange } from './calendar.ts';
-import { setupDefaultVenue, refreshDefaultVenue, restoreDefaultVenue, savedVenue, selectedVenue } from './venue-default.ts';
-import { element, escape, localInput, type MeetingDraft, type Range, type Slot, type Venue } from './model.ts';
+import { setupDefaultVenue, refreshDefaultVenue, restoreDefaultVenue, savedVenueDraft, selectedVenue } from './venue-default.ts';
+import { element, escape, localInput, status, type MeetingDraft, type Range, type Slot, type Venue } from './model.ts';
 
 function input(row: Element, selector: string): HTMLInputElement { return row.querySelector<HTMLInputElement>(selector) as HTMLInputElement; }
 function iso(value: string): string { return new Date(value).toISOString(); }
 export function setupDatePicker(): void {
-  setupDefaultVenue();
+  setupDefaultVenue(() => [...element('venues').querySelectorAll<HTMLElement>('.venue-row')].map(row => ({
+    name: input(row, '.venue-name').value.trim(), busy: [], facilityId: row.dataset.facilityId,
+  })));
   const rows = (): HTMLElement[] => [...element('slots').querySelectorAll<HTMLElement>('.slot-row')];
   setupCalendar(() => rows().map(row => input(row, '.start').value.slice(0, 10)).filter(Boolean), day => {
     const matches = rows().filter(row => input(row, '.start').value.startsWith(day));
@@ -45,9 +47,17 @@ function addBusy(container: HTMLElement, range?: Range): void {
   row.querySelector('button')?.addEventListener('click', () => row.remove()); container.append(row);
 }
 export function addVenue(value?: Venue): void {
+  if (value?.facilityId && [...element('venues').querySelectorAll<HTMLElement>('.venue-row')].some(row => row.dataset.facilityId === value.facilityId || input(row, '.venue-name').value.trim() === value.name)) {
+    status('同じ施設または同名の会場が登録されています。既存の会場を確認してください。', true); return;
+  }
   const row = document.createElement('div'); row.className = 'venue-row';
+  if (value?.facilityId) row.dataset.facilityId = value.facilityId;
   row.innerHTML = `<label>会場名<input class="venue-name" maxlength="100" required value="${escape(value?.name || '')}"></label><div class="busy-list"></div><div class="actions"><button type="button" class="add-busy">＋ 利用不可時間</button><button type="button" class="remove">会場を削除</button></div>`;
   const busy = row.querySelector<HTMLElement>('.busy-list') as HTMLElement;
+  if (value?.facilityId) {
+    input(row, '.venue-name').readOnly = true;
+    const note = document.createElement('p'); note.textContent = 'Ae登録施設'; row.prepend(note);
+  }
   row.querySelector('.add-busy')?.addEventListener('click', () => addBusy(busy));
   row.querySelector('.remove')?.addEventListener('click', () => { row.remove(); refreshVenues(); });
   row.querySelector('input')?.addEventListener('change', refreshVenues);
@@ -72,8 +82,8 @@ export function fillEditor(draft?: MeetingDraft): void {
   element<HTMLTextAreaElement>('description').value = draft?.description || '';
   element('venues').replaceChildren(); element('slots').replaceChildren();
   if (!draft) {
-    const name = savedVenue();
-    if (name) addVenue({ name, busy: [] });
+    const venue = savedVenueDraft();
+    if (venue) addVenue(venue);
   }
   for (const v of draft?.venues || []) addVenue(v);
   for (const s of draft?.slots || []) addSlot(s);
@@ -81,12 +91,16 @@ export function fillEditor(draft?: MeetingDraft): void {
   refreshVenues();
   restoreDefaultVenue();
 }
+function readVenues(): Venue[] {
+  return [...element('venues').querySelectorAll<HTMLElement>('.venue-row')].map(row => ({
+    name: input(row, '.venue-name').value.trim(), busy: [...row.querySelectorAll('.busy-row')].map(b => ({ startAt: iso(input(b, '.start').value), endAt: iso(input(b, '.end').value) })),
+    ...(row.dataset.facilityId ? { facilityId: row.dataset.facilityId } : {}),
+  }));
+}
 export function readEditor(): MeetingDraft {
   const slots = [...element('slots').querySelectorAll<HTMLElement>('.slot-row')].map(row => ({
     id: row.dataset.id || crypto.randomUUID(), startAt: iso(input(row, '.start').value), endAt: iso(input(row, '.end').value), venue: (row.querySelector('select') as HTMLSelectElement).value,
   }));
-  const venues = [...element('venues').querySelectorAll<HTMLElement>('.venue-row')].map(row => ({
-    name: input(row, '.venue-name').value.trim(), busy: [...row.querySelectorAll('.busy-row')].map(b => ({ startAt: iso(input(b, '.start').value), endAt: iso(input(b, '.end').value) })),
-  }));
+  const venues = readVenues();
   return { title: element<HTMLInputElement>('title').value, organizerName: element<HTMLInputElement>('organizer').value, onlineAllowed: element<HTMLInputElement>('online-allowed').checked, description: element<HTMLTextAreaElement>('description').value, slots, venues };
 }

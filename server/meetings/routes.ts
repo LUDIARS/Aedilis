@@ -1,4 +1,6 @@
 import type Database from 'better-sqlite3';
+import type { FacilitySource } from '../facility/source.ts';
+import { publicFacilities, validateFacilities } from './facilities.ts';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie } from 'hono/cookie';
@@ -12,7 +14,7 @@ import { MeetingRepository } from './repository.ts';
 import { MeetingError, type Candidate } from './types.ts';
 import { meetingInput, object, responseInput, revision, text } from './validation.ts';
 
-export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, client: CernereProjectClient): Hono {
+export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, client: CernereProjectClient, facilities?: FacilitySource): Hono {
   const app = new Hono(), repo = new MeetingRepository(db);
   const origin = new URL(config.publicUrl).origin, secure = origin.startsWith('https:');
   const limits = new Map<string, { count: number; until: number }>();
@@ -39,6 +41,10 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     return c.json({ error: '処理に失敗しました。再試行してください' }, 503);
   });
   app.get('/config', c => c.json({ googleClientId: config.googleClientId, discordEnabled: !!config.discordToken, cernereUrl: config.cernerePublicUrl }));
+  app.get('/facilities', async c => {
+    if (!facilities) throw new MeetingError(503, '施設一覧が設定されていません');
+    return c.json({ items: await publicFacilities(facilities) });
+  });
   app.post('/session', async c => {
     const actor = ensureActor(db, c, await actorFor(db, c), secure);
     return c.json({ linked: !!actor.userId, notifications: actor.identities.some(i => i.notify === 1) });
@@ -95,7 +101,7 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     return c.json({ items: [...items.values()] });
   });
   app.post('/', async c => {
-    const input = meetingInput(await c.req.json());
+    const input = await validateFacilities(meetingInput(await c.req.json()), facilities);
     const actor = await actorFor(db, c);
     const id = repo.create(input, actor);
     return c.json({ id }, 201);
@@ -103,7 +109,7 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
   app.get('/:id', async c => c.json(repo.view(c.req.param('id'), await actorFor(db, c))));
   app.patch('/:id', async c => {
     const body = object(await c.req.json());
-    repo.update(c.req.param('id'), meetingInput(body), revision(body.revision), await actorFor(db, c));
+    repo.update(c.req.param('id'), await validateFacilities(meetingInput(body), facilities), revision(body.revision), await actorFor(db, c));
     return c.json({ ok: true });
   });
   app.post('/:id/finalize', async c => {

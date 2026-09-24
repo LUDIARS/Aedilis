@@ -1,6 +1,6 @@
 export interface TimeRange { startAt: string; endAt: string }
 export interface Candidate extends TimeRange { id: string; venue: string }
-export interface Venue { name: string; busy: TimeRange[] }
+export interface Venue { name: string; busy: TimeRange[]; facilityId?: string }
 export interface MeetingInput {
   title: string;
   description: string;

@@ -1,6 +1,7 @@
 import { action, element, escape, request, status, type Answer, type Config, type Meeting } from './model.ts';
 import { addVenue, fillEditor, readEditor, setupDatePicker } from './editor.ts';
 import { setupGoogle } from './google.ts';
+import { setupFacilities } from './facilities.ts';
 import { refreshAccount, setupAccount } from './account.ts';
 import { renderMeeting } from './view.ts';
 import { renderResponse, readResponseChoices } from './response-editor.ts';
@@ -39,6 +40,7 @@ function editMeeting(isNew: boolean): void {
 async function main(): Promise<void> {
   const config = await request<Config>('/config');
   await refreshAccount(config); setupAccount(config, reload); setupGoogle(config);
+  await setupFacilities(addVenue);
   element('new-meeting').onclick = () => editMeeting(true);
   element('edit-meeting').onclick = () => editMeeting(false);
   setupDatePicker(); element('add-venue').onclick = () => addVenue();

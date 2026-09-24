@@ -29,7 +29,8 @@ export function meetingInput(value: unknown): MeetingInput {
   const venues = r.venues.map(v => {
     const o = object(v);
     if (!Array.isArray(o.busy) || o.busy.length > 200) throw new MeetingError(400, '会場の予定が多すぎます');
-    return { name: text(o.name, 100, true), busy: o.busy.map(range) };
+    return { name: text(o.name, 100, true), busy: o.busy.map(range),
+      ...(o.facilityId === undefined ? {} : { facilityId: text(o.facilityId, 200, true) }) };
   });
   if (new Set(venues.map(v => v.name)).size !== venues.length) throw new MeetingError(400, '会場名が重複しています');
   const slots = r.slots.map(s => {

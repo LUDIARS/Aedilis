@@ -127,7 +127,7 @@ app.get('/api/health', (c) =>
 app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
-app.route('/api/meetings', makeMeetingRouter(db, meetings, cernereProjectClient));
+app.route('/api/meetings', makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 // 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。

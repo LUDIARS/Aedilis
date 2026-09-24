@@ -1,7 +1,7 @@
 import { dateLabel } from './date-label.ts';
 export interface Range { startAt: string; endAt: string }
 export interface Slot extends Range { id: string; venue: string }
-export interface Venue { name: string; busy: Range[] }
+export interface Venue { name: string; busy: Range[]; facilityId?: string }
 export interface MeetingDraft { title: string; description: string; organizerName: string; onlineAllowed: boolean; slots: Slot[]; venues: Venue[] }
 export interface Answer {
   id: string; name: string; comment: string; topic: string;
