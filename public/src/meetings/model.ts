@@ -1,3 +1,4 @@
+import { dateLabel } from './date-label.ts';
 export interface Range { startAt: string; endAt: string }
 export interface Slot extends Range { id: string; venue: string }
 export interface Venue { name: string; busy: Range[] }
@@ -26,7 +27,12 @@ export function localInput(iso: string): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 export function label(slot: Range): string {
-  return `${new Date(slot.startAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })} 〜 ${new Date(slot.endAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+  const parts = dateLabel(slot);
+  return `${parts.date} ${parts.time}`;
+}
+export function dateMarkup(slot: Range): string {
+  const parts = dateLabel(slot);
+  return `<span class="slot-date">${escape(parts.date)}</span><span class="slot-time">${escape(parts.time)}</span>`;
 }
 export function status(message: string, error = false): void {
   const node = element('status'); node.textContent = message; node.classList.toggle('error', error);

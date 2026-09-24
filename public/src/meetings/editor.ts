@@ -1,14 +1,16 @@
 import { setupCalendar, renderCalendar, showCalendarMonth, defaultRange } from './calendar.ts';
+import { setupDefaultVenue, refreshDefaultVenue, restoreDefaultVenue, savedVenue, selectedVenue } from './venue-default.ts';
 import { element, escape, localInput, type MeetingDraft, type Range, type Slot, type Venue } from './model.ts';
 
 function input(row: Element, selector: string): HTMLInputElement { return row.querySelector<HTMLInputElement>(selector) as HTMLInputElement; }
 function iso(value: string): string { return new Date(value).toISOString(); }
 export function setupDatePicker(): void {
+  setupDefaultVenue();
   const rows = (): HTMLElement[] => [...element('slots').querySelectorAll<HTMLElement>('.slot-row')];
   setupCalendar(() => rows().map(row => input(row, '.start').value.slice(0, 10)).filter(Boolean), day => {
     const matches = rows().filter(row => input(row, '.start').value.startsWith(day));
     if (matches.length) { for (const row of matches) row.remove(); }
-    else addSlot({ id: crypto.randomUUID(), ...defaultRange(day), venue: '' });
+    else addSlot({ id: crypto.randomUUID(), ...defaultRange(day), venue: selectedVenue() });
   });
 }
 function timeFields(range?: Range): string {
@@ -19,6 +21,7 @@ export function venueNames(): string[] {
 }
 export function refreshVenues(): void {
   const names = venueNames();
+  refreshDefaultVenue(names);
   for (const select of element('slots').querySelectorAll<HTMLSelectElement>('select')) {
     const selected = select.value;
     select.innerHTML = '<option value="">会場未定</option>' + names.map(n => `<option value="${escape(n)}">${escape(n)}</option>`).join('');
@@ -53,7 +56,7 @@ export function addVenue(value?: Venue): void {
 }
 export function importRanges(ranges: Range[], target: string): void {
   if (target === 'slots') {
-    for (const r of ranges) addSlot({ ...r, id: crypto.randomUUID(), venue: '' });
+    for (const r of ranges) addSlot({ ...r, id: crypto.randomUUID(), venue: selectedVenue() });
     return;
   }
   const name = target.slice('venue:'.length);
@@ -68,10 +71,15 @@ export function fillEditor(draft?: MeetingDraft): void {
   element<HTMLInputElement>('online-allowed').checked = draft?.onlineAllowed ?? false;
   element<HTMLTextAreaElement>('description').value = draft?.description || '';
   element('venues').replaceChildren(); element('slots').replaceChildren();
+  if (!draft) {
+    const name = savedVenue();
+    if (name) addVenue({ name, busy: [] });
+  }
   for (const v of draft?.venues || []) addVenue(v);
   for (const s of draft?.slots || []) addSlot(s);
   showCalendarMonth(draft?.slots[0] ? localInput(draft.slots[0].startAt).slice(0, 10) : undefined);
   refreshVenues();
+  restoreDefaultVenue();
 }
 export function readEditor(): MeetingDraft {
   const slots = [...element('slots').querySelectorAll<HTMLElement>('.slot-row')].map(row => ({

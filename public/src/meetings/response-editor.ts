@@ -1,4 +1,4 @@
-import { element, escape, label, type Answer, type Meeting } from './model.ts';
+import { element, escape, dateMarkup, type Answer, type Meeting } from './model.ts';
 
 const choices = { yes: ['○', '参加できる'], maybe: ['△', '調整できれば参加'], no: ['×', '参加できない'] } as const;
 export function renderResponse(meeting: Meeting, response: Answer | undefined): void {
@@ -11,7 +11,7 @@ export function renderResponse(meeting: Meeting, response: Answer | undefined): 
   element('response-slots').innerHTML = meeting.slots.map(slot => {
     const overridden = Object.prototype.hasOwnProperty.call(response?.online ?? {}, slot.id);
     const online = response?.online?.[slot.id] ?? base.checked;
-    return `<fieldset class="answer-choice" data-slot="${escape(slot.id)}" ${open ? '' : 'disabled'}><legend>${escape(label(slot))} ${escape(slot.venue || '会場未定')}</legend>
+    return `<fieldset class="answer-choice" data-slot="${escape(slot.id)}" ${open ? '' : 'disabled'}><legend>${dateMarkup(slot)} ${escape(slot.venue || '会場未定')}</legend>
       <div class="answer-buttons" role="group" aria-label="参加可否">${Object.entries(choices).map(([value, [symbol, text]]) => `<button type="button" data-answer="${value}" aria-label="${symbol} ${text}" aria-pressed="${response?.answers[slot.id] === value}">${symbol}<span>${text}</span></button>`).join('')}</div>
       <label class="inline-check"><input type="checkbox" class="answer-online" ${online ? 'checked' : ''} data-override="${overridden}">ONLINE <span>オンラインなら参加可能</span></label>
       <button type="button" class="online-reset" ${overridden ? '' : 'hidden'}>基本ONLINEに合わせる</button></fieldset>`;
