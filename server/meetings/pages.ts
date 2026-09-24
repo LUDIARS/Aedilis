@@ -6,7 +6,9 @@ export function meetingPages(): Hono {
   const app = new Hono();
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const html = serveStatic({ path: './public/meetings.html' });
-  for (const path of ['/meetings', '/meetings/', '/meetings.html', '/meeting/*']) app.use(path, async (c, next) => {
+  // HTML and unversioned bundles must not be cached independently across deployments.
+  // The HTML query revision also bypasses copies cached before this policy existed.
+  for (const path of ['/meetings', '/meetings/', '/meetings.html', '/meeting/*', '/meetings.js', '/meetings.css', '/meetings-controls.css']) app.use(path, async (c, next) => {
     c.header('Referrer-Policy', 'no-referrer'); c.header('X-Frame-Options', 'DENY');
     c.header('X-Content-Type-Options', 'nosniff'); c.header('Cache-Control', 'no-store');
     await next();
