@@ -1,8 +1,9 @@
 import { action, element, escape, request, status, type Answer, type Config, type Meeting } from './model.ts';
-import { addSlot, addVenue, fillEditor, readEditor } from './editor.ts';
+import { addVenue, fillEditor, readEditor, setupDatePicker } from './editor.ts';
 import { setupGoogle } from './google.ts';
 import { refreshAccount, setupAccount } from './account.ts';
-import { renderMeeting, renderResponse } from './view.ts';
+import { renderMeeting } from './view.ts';
+import { renderResponse, readResponseChoices } from './response-editor.ts';
 
 let meeting: Meeting | null = null;
 let response: Answer | undefined;
@@ -10,11 +11,11 @@ let editing = false;
 function page(id: 'home' | 'editor' | 'meeting'): void { for (const name of ['home', 'editor', 'meeting']) element(name).hidden = name !== id; }
 function selectResponse(answer: Answer | undefined): void { response = answer; if (meeting) renderResponse(meeting, answer); }
 async function reload(): Promise<void> {
-  const id = new URLSearchParams(location.search).get('meeting');
+  const id = location.pathname.match(/^\/meeting\/([0-9a-f-]+)$/i)?.[1];
   if (!id) {
     meeting = null; page('home');
     const { items } = await request<{ items: Array<{ id: string; title: string; state: string }> }>('/mine');
-    element('mine').innerHTML = items.map(i => `<a href="/meetings?meeting=${encodeURIComponent(i.id)}">${escape(i.title)} · ${{ open: '調整中', finalized: '確定', cancelled: '中止' }[i.state] || ''}</a>`).join('') || '<p>会議を作成・回答するとここに表示されます。</p>';
+    element('mine').innerHTML = items.map(i => `<a href="/meeting/${encodeURIComponent(i.id)}">${escape(i.title)} · ${{ open: '調整中', finalized: '確定', cancelled: '中止' }[i.state] || ''}</a>`).join('') || '<p>会議を作成・回答するとここに表示されます。</p>';
     return;
   }
   meeting = await request<Meeting>(`/${encodeURIComponent(id)}`);
@@ -23,9 +24,9 @@ async function reload(): Promise<void> {
 }
 async function saveAnswer(): Promise<void> {
   if (!meeting) return;
-  const answers = Object.fromEntries([...element('response-slots').querySelectorAll<HTMLSelectElement>('select')].map(s => [s.dataset.slot, s.value]));
+  const choices = readResponseChoices();
   const body = { name: element<HTMLInputElement>('response-name').value, comment: element<HTMLTextAreaElement>('response-comment').value, topic: element<HTMLTextAreaElement>('response-topic').value,
-    answers, revision: response?.revision, meetingRevision: meeting.revision };
+    ...choices, revision: response?.revision, meetingRevision: meeting.revision };
   await request(`/${meeting.id}/responses${response ? `/${response.id}` : ''}`, response ? 'PATCH' : 'POST', body);
   await reload(); status('回答を保存しました。同じ端末から編集できます');
 }
@@ -40,7 +41,7 @@ async function main(): Promise<void> {
   await refreshAccount(config); setupAccount(config, reload); setupGoogle(config);
   element('new-meeting').onclick = () => editMeeting(true);
   element('edit-meeting').onclick = () => editMeeting(false);
-  element('add-slot').onclick = () => addSlot(); element('add-venue').onclick = () => addVenue();
+  setupDatePicker(); element('add-venue').onclick = () => addVenue();
   element('cancel-editor').onclick = () => { void action(reload); };
   element('meeting-form').onsubmit = event => {
     event.preventDefault();
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
         if (editing && meeting) await request(`/${meeting.id}`, 'PATCH', { ...input, revision: meeting.revision });
         else {
           const result = await request<{ id: string }>('', 'POST', input);
-          history.pushState(null, '', `/meetings?meeting=${encodeURIComponent(result.id)}`);
+          history.pushState(null, '', `/meeting/${encodeURIComponent(result.id)}`);
         }
         await reload(); status('保存しました。共有URLを参加者に送ってください');
       } finally { button.disabled = false; }

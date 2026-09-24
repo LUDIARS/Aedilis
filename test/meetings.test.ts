@@ -29,6 +29,32 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe('meeting ownership and revisions', () => {
+  it('preserves legacy records during online response migration, including repeated migrations', () => {
+    const id = repo.create(draft, host);
+    repo.saveResponse(id, answer, null, null, 1, participant);
+    db.exec('ALTER TABLE meeting_response DROP COLUMN default_online; ALTER TABLE meeting_response DROP COLUMN online_json');
+    migrateMeetings(db); migrateMeetings(db);
+    const saved = repo.responses(id)[0];
+    expect(saved?.default_online).toBe(0); expect(saved?.online_json).toBe('{}');
+    expect(JSON.parse(saved?.answers_json || '{}')).toEqual(answer.answers);
+  });
+  it('stores per-date online overrides independently, validates them, and clears changed-slot overrides', () => {
+    const twoSlots = { ...draft, slots: [...draft.slots, { ...draft.slots[0]!, id: 'slot-b' }] };
+    const id = repo.create(twoSlots, host);
+    const input = responseInput({ ...answer, answers: { 'slot-a': 'yes', 'slot-b': 'maybe' }, defaultOnline: true, online: { 'slot-a': false } }, twoSlots.slots);
+    repo.saveResponse(id, input, null, null, 1, participant);
+    const saved = repo.responses(id)[0];
+    expect(saved?.default_online).toBe(1); expect(JSON.parse(saved?.online_json || '{}')).toEqual({ 'slot-a': false });
+    expect(repo.view(id, participant)).toMatchObject({ responses: [{ defaultOnline: true, online: { 'slot-a': false } }] });
+    expect(() => responseInput({ ...input, online: { unknown: true } }, twoSlots.slots)).toThrow('ONLINE');
+    expect(() => responseInput({ ...input, online: { 'slot-a': 'true' } }, twoSlots.slots)).toThrow('ONLINE');
+    expect(() => responseInput({ ...input, defaultOnline: 'true' }, twoSlots.slots)).toThrow('ONLINE');
+    repo.update(id, { ...twoSlots, slots: twoSlots.slots.map(s => s.id === 'slot-a' ? { ...s, endAt: '2026-10-01T03:00:00.000Z' } : s) }, 1, host);
+    const changed = repo.responses(id)[0];
+    expect(JSON.parse(changed?.online_json || '{}')).toEqual({});
+    expect(JSON.parse(changed?.answers_json || '{}')).toEqual({ 'slot-b': 'maybe' });
+    expect(changed?.default_online).toBe(1);
+  });
   it('rejects another browser changing or deleting an answer, even with the same name', () => {
     const id = repo.create(draft, host);
     repo.saveResponse(id, answer, null, null, 1, participant);

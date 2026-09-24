@@ -1,7 +1,16 @@
+import { setupCalendar, renderCalendar, showCalendarMonth, defaultRange } from './calendar.ts';
 import { element, escape, localInput, type MeetingDraft, type Range, type Slot, type Venue } from './model.ts';
 
 function input(row: Element, selector: string): HTMLInputElement { return row.querySelector<HTMLInputElement>(selector) as HTMLInputElement; }
 function iso(value: string): string { return new Date(value).toISOString(); }
+export function setupDatePicker(): void {
+  const rows = (): HTMLElement[] => [...element('slots').querySelectorAll<HTMLElement>('.slot-row')];
+  setupCalendar(() => rows().map(row => input(row, '.start').value.slice(0, 10)).filter(Boolean), day => {
+    const matches = rows().filter(row => input(row, '.start').value.startsWith(day));
+    if (matches.length) { for (const row of matches) row.remove(); }
+    else addSlot({ id: crypto.randomUUID(), ...defaultRange(day), venue: '' });
+  });
+}
 function timeFields(range?: Range): string {
   return `<div class="row"><label>開始<input class="start" type="datetime-local" required value="${range ? localInput(range.startAt) : ''}"></label><label>終了<input class="end" type="datetime-local" required value="${range ? localInput(range.endAt) : ''}"></label></div>`;
 }
@@ -12,7 +21,7 @@ export function refreshVenues(): void {
   const names = venueNames();
   for (const select of element('slots').querySelectorAll<HTMLSelectElement>('select')) {
     const selected = select.value;
-    select.innerHTML = '<option value="">未定・オンライン</option>' + names.map(n => `<option value="${escape(n)}">${escape(n)}</option>`).join('');
+    select.innerHTML = '<option value="">会場未定</option>' + names.map(n => `<option value="${escape(n)}">${escape(n)}</option>`).join('');
     select.value = names.includes(selected) ? selected : '';
   }
   const target = element<HTMLSelectElement>('google-target'), selected = target.value;
@@ -22,8 +31,9 @@ export function refreshVenues(): void {
 export function addSlot(value?: Slot): void {
   const row = document.createElement('div'); row.className = 'slot-row'; row.dataset.id = value?.id || crypto.randomUUID();
   row.innerHTML = `${timeFields(value)}<label>会場<select></select></label><button type="button" class="remove">候補を削除</button>`;
-  row.querySelector('button')?.addEventListener('click', () => row.remove());
-  element('slots').append(row); refreshVenues();
+  row.querySelector('button')?.addEventListener('click', () => { row.remove(); renderCalendar(); });
+  row.querySelector('.start')?.addEventListener('change', renderCalendar);
+  element('slots').append(row); refreshVenues(); renderCalendar();
   if (value) (row.querySelector('select') as HTMLSelectElement).value = value.venue;
 }
 function addBusy(container: HTMLElement, range?: Range): void {
@@ -60,7 +70,7 @@ export function fillEditor(draft?: MeetingDraft): void {
   element('venues').replaceChildren(); element('slots').replaceChildren();
   for (const v of draft?.venues || []) addVenue(v);
   for (const s of draft?.slots || []) addSlot(s);
-  if (!draft) addSlot();
+  showCalendarMonth(draft?.slots[0] ? localInput(draft.slots[0].startAt).slice(0, 10) : undefined);
   refreshVenues();
 }
 export function readEditor(): MeetingDraft {

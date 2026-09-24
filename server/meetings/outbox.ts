@@ -29,7 +29,7 @@ export function startMeetingOutbox(db: Database.Database, client: CernereProject
             continue;
           }
           const recipient = await discordIdentity(client, owner.user_id);
-          const url = new URL('/meetings', config.publicUrl);
+          const url = new URL(`/meeting/${encodeURIComponent(job.meeting_id)}`, config.publicUrl);
           url.searchParams.set('meeting', job.meeting_id);
           // No free text in notification content: private agendas and mentions stay on the meeting page.
           const messageId = await sendDiscord(config.discordToken as string, recipient, job.id, `Aedilis: ${labels[job.event] ?? '会議が更新されました'}\n${url.href}`);

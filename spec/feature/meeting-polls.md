@@ -76,3 +76,24 @@ An additive, repeatable migration adds `meeting_poll.online_allowed`.
 Creation uses POST `/api/meetings` (no trailing slash), including requests through
 the frontend HTTP helper. The mounted-router regression covers anonymous creation,
 reload and editing online availability without changing the venue.
+# Calendar and participant controls (2026-09-24)
+
+- List/create page: `/meetings`. Canonical shared detail: `/meeting/{UUID}`.
+  Legacy query-string and `.html` links redirect to that detail route. Notification
+  links also use the canonical path. Public JSON API paths remain `/api/meetings`.
+- Organizers choose multiple dates in a monthly calendar. Start/end defaults are
+  editable and saved on the current browser with explicit feedback if storage fails.
+  New selected dates receive those times; existing candidates are never implicitly
+  rewritten. Candidate details allow individual time/venue changes. Clicking a
+  selected date removes its candidates, including multiple imported slots that day.
+- Participants select one of yes/maybe/no (○/△/×) using buttons for each candidate.
+  Unanswered dates prevent submission. Keyboard focus and selected state are visible.
+- `defaultOnline` is the participant's baseline online capability, independent of
+  the organizer's `onlineAllowed` acceptance. `online` maps candidate IDs to explicit
+  boolean overrides. Absence means inherit the baseline; explicit false is retained.
+  ONLINE means the participant can attend online, not that the organizer permits it.
+- Baseline changes preserve explicit overrides. Each date can reset to the baseline.
+  The shared answer table displays ONLINE with each answered date's effective value.
+- Additive `default_online`/`online_json` columns preserve old responses (false/empty
+  map). Changed/removed slots invalidate both answers and per-slot overrides while
+  retaining the participant's baseline. Unknown slot IDs and nonboolean values fail.

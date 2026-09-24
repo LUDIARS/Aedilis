@@ -44,6 +44,13 @@ export function meetingInput(value: unknown): MeetingInput {
 }
 export function responseInput(value: unknown, slots: Candidate[]): ResponseInput {
   const r = object(value), answers = object(r.answers);
+  if (r.defaultOnline !== undefined && typeof r.defaultOnline !== 'boolean') throw new MeetingError(400, '基本ONLINEの値が不正です');
+  const suppliedOnline = r.online === undefined ? {} : object(r.online);
+  const online: Record<string, boolean> = Object.create(null) as Record<string, boolean>;
+  for (const [id, value] of Object.entries(suppliedOnline)) {
+    if (!slots.some(slot => slot.id === id) || typeof value !== 'boolean') throw new MeetingError(400, '日程ごとのONLINEの値が不正です');
+    online[id] = value;
+  }
   if (Object.keys(answers).some(id => !slots.some(s => s.id === id))) throw new MeetingError(400, '候補が変更されています。再読込してください');
   const normalized: ResponseInput['answers'] = Object.create(null) as ResponseInput['answers'];
   for (const slot of slots) {
@@ -51,7 +58,7 @@ export function responseInput(value: unknown, slots: Candidate[]): ResponseInput
     if (a !== 'yes' && a !== 'maybe' && a !== 'no') throw new MeetingError(400, 'すべての候補に回答してください');
     normalized[slot.id] = a;
   }
-  return { name: text(r.name, 80, true), comment: text(r.comment, 2000), topic: text(r.topic, 2000), answers: normalized };
+  return { name: text(r.name, 80, true), comment: text(r.comment, 2000), topic: text(r.topic, 2000), answers: normalized, defaultOnline: r.defaultOnline ?? false, online };
 }
 export function revision(value: unknown): number {
   if (!Number.isSafeInteger(value) || Number(value) < 1) throw new MeetingError(400, '版番号が不正です');

@@ -39,4 +39,11 @@ export function migrateMeetings(db: Database.Database): void {
   if (!columns.some(column => column.name === 'online_allowed')) {
     db.exec('ALTER TABLE meeting_poll ADD COLUMN online_allowed INTEGER NOT NULL DEFAULT 0 CHECK (online_allowed IN (0,1))');
   }
+  const responseColumns = db.prepare('PRAGMA table_info(meeting_response)').all() as { name: string }[];
+  if (!responseColumns.some(column => column.name === 'default_online')) {
+    db.exec('ALTER TABLE meeting_response ADD COLUMN default_online INTEGER NOT NULL DEFAULT 0 CHECK (default_online IN (0,1))');
+  }
+  if (!responseColumns.some(column => column.name === 'online_json')) {
+    db.exec("ALTER TABLE meeting_response ADD COLUMN online_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(online_json))");
+  }
 }

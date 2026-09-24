@@ -5,6 +5,7 @@
   <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
   <title>Aedilis — みんなの予定をひとつに</title>
   <link rel="stylesheet" href="/meetings.css">
+  <link rel="stylesheet" href="/meetings-controls.css">
 </head>
 <body>
   <header><a class="brand" href="/meetings">Aedilis <span>日程調整</span></a><a href="/">施設予約</a></header>
@@ -26,12 +27,14 @@
       <form id="meeting-form">
         <label>会議のタイトル<input id="title" maxlength="150" required placeholder="次の企画について話す会"></label>
         <label>主催者のお名前<input id="organizer" maxlength="80" required></label>
-        <label><input id="online-allowed" type="checkbox">オンライン参加可</label>
+        <label class="inline-check"><input id="online-allowed" type="checkbox">主催者としてオンライン参加を受け入れる</label>
         <label>説明・参加者へのメッセージ<textarea id="description" maxlength="3000" rows="3"></textarea></label>
         <h2>会場と利用できない時間</h2><p>会場名だけでも登録できます。予約済みの時間があれば追加してください。</p>
         <div id="venues"></div><button id="add-venue" type="button">＋ 会場を追加</button>
         <h2>候補日時</h2><p>日時はこの端末のタイムゾーンで表示します。会場の予約確保は別途行ってください。</p>
-        <div id="slots"></div><button id="add-slot" type="button">＋ 候補を追加</button>
+        <div class="time-defaults"><div class="row"><label>標準の開始時刻<input id="default-start" type="time" value="19:00" required></label><label>標準の終了時刻<input id="default-end" type="time" value="20:00" required></label></div><button id="save-default-times" type="button">この時刻をデフォルトに保存</button><p>選択する日付にこの時刻を使います。既存の候補時刻は変更しません。</p></div>
+        <div class="date-calendar"><div class="calendar-nav"><button id="calendar-prev" type="button" aria-label="前の月">‹</button><strong id="calendar-month" aria-live="polite"></strong><button id="calendar-next" type="button" aria-label="次の月">›</button></div><div class="calendar-week" aria-hidden="true"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div><div id="calendar-days" class="calendar-days"></div><p id="calendar-count" aria-live="polite"></p><p>日付を押して追加、もう一度押してその日の候補を解除できます。</p></div>
+        <details class="slot-details"><summary>選択した候補の時刻・会場を調整</summary><div id="slots"></div></details>
         <details class="import"><summary>Googleカレンダーから読み込む</summary>
           <p>選んだ予定だけを候補日時・会場の利用不可時間に取り込みます。Googleへの読み取り許可が必要です。</p>
           <p id="google-help"></p><button id="google-connect" type="button">Googleカレンダーを選ぶ</button>
@@ -48,7 +51,7 @@
       <div id="manage" class="card" hidden><h2>主催者の操作</h2><p>会議の編集後は回答受付を再開します。変更された候補は再回答が必要になります。</p><div class="actions"><button id="edit-meeting">会議を編集</button><button id="cancel-meeting" class="danger">会議を中止</button></div><label>開催日時を決める<select id="final-slot"></select></label><button id="finalize" class="primary">この日時で確定</button></div>
       <section class="card"><h2>みんなの都合</h2><p id="final-choice"></p><div class="table-scroll" id="answer-table"></div></section>
       <section class="card"><h2>コメント・話したいこと</h2><div id="comments"></div></section>
-      <section class="card" id="response-panel"><h2 id="response-title">あなたの都合を教えてください</h2><form id="response-form"><label>お名前<input id="response-name" maxlength="80" required></label><div id="response-slots"></div><label>コメント<textarea id="response-comment" maxlength="2000" rows="3"></textarea></label><label>話したいこと（任意）<textarea id="response-topic" maxlength="2000" rows="3"></textarea></label><div class="actions"><button id="save-response" class="primary">回答を保存</button><button id="delete-response" class="danger" type="button" hidden>自分の回答を削除</button></div></form></section>
+      <section class="card" id="response-panel"><h2 id="response-title">あなたの都合を教えてください</h2><form id="response-form"><label>お名前<input id="response-name" maxlength="80" required></label><label class="inline-check"><input type="checkbox" id="response-default-online">基本ONLINE</label><p class="hint">ONLINEは「オンラインなら参加可能」です。日程ごとに変更できます。個別に変えた日程は基本設定を変えても保持します。</p><div id="response-slots"></div><label>コメント<textarea id="response-comment" maxlength="2000" rows="3"></textarea></label><label>話したいこと（任意）<textarea id="response-topic" maxlength="2000" rows="3"></textarea></label><div class="actions"><button id="save-response" class="primary">回答を保存</button><button id="delete-response" class="danger" type="button" hidden>自分の回答を削除</button></div></form></section>
       <a href="/meetings">← 自分の会議に戻る</a>
     </section>
   </main>

@@ -1,0 +1,22 @@
+.inline-check{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.inline-check input[type=checkbox]{width:20px;height:20px;margin:0;flex:0 0 auto;accent-color:var(--green)}
+.inline-check span{font-size:13px;color:#52665f}
+.time-defaults,.date-calendar{padding:18px;border:1px solid var(--line);border-radius:12px;margin:18px 0;background:#fafcf8}
+.time-defaults p,.date-calendar p{font-size:13px;color:#52665f}
+.date-calendar{max-width:480px}
+.calendar-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.calendar-nav button{min-width:44px;min-height:44px;font-size:22px}
+.calendar-week,.calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;text-align:center}
+.calendar-week{font-size:12px;color:#52665f;margin-bottom:8px}
+.calendar-days button{padding:8px 0;min-height:44px;border-radius:8px}
+.calendar-days [aria-current=date]{outline:2px solid #96b5a4;outline-offset:-4px}
+.calendar-days [aria-pressed=true],.answer-buttons [aria-pressed=true]{color:white;background:var(--green);border-color:var(--green);box-shadow:0 0 0 2px #aac8b9}
+.slot-details{margin:20px 0}.slot-details summary{padding:12px 0}
+.answer-choice{border:0;border-bottom:1px solid var(--line);padding:18px 0;margin:0 0 12px;min-width:0}
+.answer-choice legend{font-weight:600;padding:0;max-width:100%;overflow-wrap:anywhere}
+.answer-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0 16px;max-width:560px}
+.answer-buttons button{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:27px;padding:12px 4px;min-height:72px}
+.answer-buttons button span{font-size:11px;font-weight:400}
+.online-reset{font-size:12px;padding:6px 10px}.online-badge{display:inline-block;font-size:10px;font-weight:700;color:#216859;background:#e3f1df;border-radius:4px;padding:2px 5px;margin-top:4px}
+button:focus-visible,input:focus-visible{outline:3px solid #ba6f26;outline-offset:3px}
+@media(max-width:420px){.date-calendar{padding:12px}.calendar-days{gap:3px}.answer-buttons{gap:6px}}

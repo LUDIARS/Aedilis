@@ -36,7 +36,9 @@ export class MeetingRepository {
       for (const answer of this.responses(id)) {
         const values = JSON.parse(answer.answers_json) as ResponseInput['answers'];
         const kept = Object.fromEntries(Object.entries(values).filter(([key]) => unchanged.has(key)));
-        this.db.prepare('UPDATE meeting_response SET answers_json = ?, revision = revision + 1 WHERE id = ?').run(JSON.stringify(kept), answer.id);
+        const online = JSON.parse(answer.online_json) as Record<string, boolean>;
+        const keptOnline = Object.fromEntries(Object.entries(online).filter(([key]) => unchanged.has(key)));
+        this.db.prepare('UPDATE meeting_response SET answers_json = ?, online_json = ?, revision = revision + 1 WHERE id = ?').run(JSON.stringify(kept), JSON.stringify(keptOnline), answer.id);
       }
       // Any organizer edit reopens scheduling so a stale final choice cannot survive changes.
       this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,online_allowed=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
@@ -75,13 +77,13 @@ export class MeetingRepository {
       if (responseId) {
         const row = this.response(id, responseId);
         this.requireOwner(row, actor); this.requireRevision(row.revision, expected ?? 0);
-        this.db.prepare('UPDATE meeting_response SET name=?,comment=?,topic=?,answers_json=?,revision=revision+1 WHERE id=?')
-          .run(input.name, input.comment, input.topic, JSON.stringify(input.answers), row.id);
+        this.db.prepare('UPDATE meeting_response SET name=?,comment=?,topic=?,answers_json=?,default_online=?,online_json=?,revision=revision+1 WHERE id=?')
+          .run(input.name, input.comment, input.topic, JSON.stringify(input.answers), Number(input.defaultOnline ?? false), JSON.stringify(input.online ?? {}), row.id);
       } else {
         if (this.responses(id).some(r => owns(actor, r.owner_id))) throw new MeetingError(409, '回答済みです。自分の回答を編集してください');
         if (this.responses(id).length >= 500) throw new MeetingError(409, '参加者の上限に達しました');
-        this.db.prepare('INSERT INTO meeting_response(id,meeting_id,owner_id,name,comment,topic,answers_json) VALUES(?,?,?,?,?,?,?)')
-          .run(randomUUID(), id, actor.current.id, input.name, input.comment, input.topic, JSON.stringify(input.answers));
+        this.db.prepare('INSERT INTO meeting_response(id,meeting_id,owner_id,name,comment,topic,answers_json,default_online,online_json) VALUES(?,?,?,?,?,?,?,?,?)')
+          .run(randomUUID(), id, actor.current.id, input.name, input.comment, input.topic, JSON.stringify(input.answers), Number(input.defaultOnline ?? false), JSON.stringify(input.online ?? {}));
       }
       this.enqueue(id, responseId ? 'response_changed' : 'response_added', [meeting.owner_id], actor);
     })();
@@ -117,7 +119,7 @@ export class MeetingRepository {
       id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1,
       slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
       selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,
-      responses: this.responses(id).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),
+      responses: this.responses(id).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), defaultOnline: r.default_online === 1, online: JSON.parse(r.online_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),
     };
   }
 }

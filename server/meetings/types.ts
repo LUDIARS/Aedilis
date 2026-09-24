@@ -14,6 +14,8 @@ export interface ResponseInput {
   comment: string;
   topic: string;
   answers: Record<string, 'yes' | 'maybe' | 'no'>;
+  defaultOnline?: boolean;
+  online?: Record<string, boolean>;
 }
 export interface IdentityRow { id: string; user_id: string | null; notify: number }
 export interface MeetingRow {
@@ -25,6 +27,7 @@ export interface MeetingRow {
 export interface ResponseRow {
   id: string; meeting_id: string; owner_id: string; name: string;
   comment: string; topic: string; answers_json: string; revision: number;
+  default_online: number; online_json: string;
 }
 export interface Actor { identities: IdentityRow[]; current: IdentityRow | null; userId: string | null }
 export class MeetingError extends Error {

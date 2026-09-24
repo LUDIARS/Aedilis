@@ -4,6 +4,7 @@ export interface Venue { name: string; busy: Range[] }
 export interface MeetingDraft { title: string; description: string; organizerName: string; onlineAllowed: boolean; slots: Slot[]; venues: Venue[] }
 export interface Answer {
   id: string; name: string; comment: string; topic: string;
+  defaultOnline: boolean; online: Record<string, boolean>;
   answers: Record<string, 'yes' | 'maybe' | 'no'>; revision: number; canEdit: boolean;
 }
 export interface Meeting extends MeetingDraft {

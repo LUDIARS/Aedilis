@@ -8,6 +8,7 @@
 //   5. router を mount → listen
 
 import { Hono } from 'hono';
+import { meetingPages } from './meetings/pages.ts';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -135,16 +136,7 @@ app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 app.route('/api', makeCheckinRouter(db, cernereProjectClient));
 
 // serveStatic は cwd 相対なので、 npm scripts は repo root から起動する前提。
-app.use('/meetings', async (c, next) => {
-  c.header('Referrer-Policy', 'no-referrer');
-  c.header('X-Frame-Options', 'DENY');
-  c.header('X-Content-Type-Options', 'nosniff');
-  c.header('Cache-Control', 'no-store');
-  await next();
-});
-app.get('/meetings', serveStatic({ path: './public/meetings.html' }));
-app.get('/meetings.html', (c) => c.redirect(`/meetings${new URL(c.req.url).search}`, 308));
-app.get('/meetings/', (c) => c.redirect(`/meetings${new URL(c.req.url).search}`, 308));
+app.route('/', meetingPages());
 app.use('/*', serveStatic({ root: './public' }));
 app.get('/', serveStatic({ path: './public/index.html' }));
 app.notFound((c) => {
