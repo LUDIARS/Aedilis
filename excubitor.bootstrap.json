@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "service": "aedilis",
+  "setup": "scripts/site/setup.mjs",
+  "data": {
+    "export": "scripts/site/data-unavailable.mjs",
+    "import": "scripts/site/data-unavailable.mjs"
+  }
+}

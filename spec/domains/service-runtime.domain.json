@@ -6,6 +6,12 @@
   "membership": [
     {
       "pathPattern": "(^|/)server/(?:index|bootstrap)\\.ts$"
+    },
+    {
+      "pathPattern": "(^|/)scripts/site/.*\\.mjs$"
     }
+  ],
+  "specRefs": [
+    "spec/feature/service-bootstrap.md"
   ]
 }

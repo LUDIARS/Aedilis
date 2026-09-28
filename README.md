@@ -95,3 +95,9 @@ Excubitor を介さず直接起動する場合は、同等の短期プロジェ�
 ## ライセンス
 
 リポジトリの LICENSE に準ずる。
+
+## Excubitorによる新規導入
+
+`excubitor.bootstrap.json` は `scripts/site/setup.mjs` を実行する。Node/npmを前提にロック済み依存を `npm ci --include=dev` で導入し、`build:web` を実行する。非対話・再実行可能で、失敗は非0終了。既存SQLite・秘密・接続設定は変更せず、サービス起動やデータ移行を行わない。SQLiteのスキーマ準備は通常起動時が所有する。
+
+AWS等の別拠点では、起動前にCernereの到達先とExのissuer資格情報を設定する。既存の公開URLの切替や本社データの移行は別途確認する。移行操作は未対応エラーで停止し、空の移行を成功扱いしない。セットアップのみの場合はEx bootstrapの `start:false` を使う。
