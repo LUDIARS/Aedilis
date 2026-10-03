@@ -63,18 +63,19 @@ Googleカレンダー読み込みとDiscord通知の設定は
 
 ## 起動
 
-Bibliotheca と同じ env bootstrap (Infisical / `.env` / host env の多段)。
+Excubitor から起動し、設定と Vault の秘密情報を子プロセスの env に注入する。
+非秘密設定は `excubitor.catalog.yaml` の `env:`、秘密情報は Ex の Vault binding で管理する。
+アプリは `.env` / `.env.secrets` を読み込まず、外部の secret store へ接続しない。
 
 ```bash
 npm install
-npm run dev        # tsx watch、 public/app.js を build してから起動
+# サービス起動は Excubitor から行う (catalog: node --run dev:excubitor)
 ```
 
 必須 env: `CERNERE_BASE_URL`、 `AEDILIS_PUBLIC_URL`、
 `CERNERE_PROJECT_CLIENT_ID`、`CERNERE_PROJECT_CLIENT_SECRET`。
 後者 2 つは Excubitor 起動時に Cernere が都度発行して子プロセスへ注入する。
-Excubitor を介さず直接起動する場合は、同等の短期プロジェクト資格情報を環境変数で
-明示的に与える必要がある（Infisical に固定の長期資格情報を保存しない）。
+必須 env が未設定または空白なら、本体の import 前に変数名だけを示して停止する。
 任意: `AEDILIS_PORT` (既定 17502)、 `AEDILIS_ADMIN_IDS`、 `AEDILIS_DATA`、
 `AEDILIS_FACILITIES` (施設マスタ JSON のパス、 既定はリポ直下 `facilities.json`)。
 

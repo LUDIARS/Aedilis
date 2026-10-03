@@ -19,8 +19,8 @@
 - Cernere PASETO V4 検証は `server/auth.ts` (公開鍵 6h 毎 refresh)
 - 個人データは Cernere 単一情報源。 自前 DB には `owner_user_id` (Cernere sub) と
   display name の **キャッシュ** のみ
-- 起動口は `server/bootstrap.ts`: Infisical machine identity → `ensureEnv()` で
-  secret fetch & inject → `index.ts`
+- 起動口は `server/bootstrap.ts`: Excubitor が注入した必須 env を検査 → `index.ts`。
+  秘密情報は Ex の Vault が供給する。アプリで secret 取得や dotenv 読み込みはしない。
 - 予約 ID は `crypto.randomUUID()` (DESIGN は ulid 想定だったが依存削減のため UUID)
 
 ## モジュール構成

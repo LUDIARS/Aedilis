@@ -110,7 +110,7 @@ inbound は **v0.1 では Schedula 側のみ** (Google からの inbound は v0.
 ## 4. 非機能要件
 
 - **個人データ**: Cernere 単一情報源。 Aedilis は `userId` (Cernere sub) と display name キャッシュのみ保持
-- **OAuth トークン**: Google refresh token は **Infisical 経由で別 secret 化**、 SQLite には access token の短期キャッシュのみ
+- **OAuth トークン**: Google refresh token の永続化は将来の別設計。起動用 secret は Ex の Vault binding が所有する
 - **ポート**: loopback `17502` (Bibliotheca = 17501、 隣で取る。 17500 は Dropbox squat なので避ける)
 - **データベース**: SQLite (better-sqlite3 / WAL)、 ファイル `data/aedilis.db`
 - **可用性**: 単一プロセス、 落ちたら再起動 (Excubitor 経由運用)
@@ -157,11 +157,11 @@ Aedilis/
 ├── CLAUDE.md            # Claude 向け内部メモ
 ├── README.md            # ユーザ向け
 ├── DESIGN.md            # 本書
-├── env-cli.config.ts    # Infisical secret 一覧
+├── excubitor.catalog.yaml # Ex 起動・非秘密設定・Vault binding 要求
 ├── data/                # SQLite + facility JSON 暫定マスタ
 ├── public/              # ビルド前 SPA
 ├── server/
-│   ├── bootstrap.ts     # Infisical bootstrap → index.ts
+│   ├── bootstrap.ts     # Ex 注入 env を検査 → index.ts
 │   ├── index.ts         # Hono app 起動
 │   ├── auth.ts          # PASETO V4 検証 + requireAdmin
 │   ├── db.ts            # better-sqlite3 + migrations
@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS calendar_binding (
   provider        TEXT NOT NULL,           -- 'schedula'|'google'
   external_id     TEXT NOT NULL,           -- google calendarId / schedula calendarId
   display_name    TEXT NOT NULL,
-  token_ref       TEXT,                    -- Infisical key (google のみ)
+  token_ref       TEXT,                    -- 将来の secret 参照 (google のみ、保管方式は別設計)
   created_at      INTEGER NOT NULL,
   UNIQUE(user_id, provider, external_id)
 );
@@ -264,7 +264,7 @@ migration は CREATE IF NOT EXISTS のみ。 カラム追加は ALTER 系を後�
 | DELETE| `/api/reservations/:id`                | キャンセル (本人 or admin) |
 | GET  | `/api/calendars`                        | 自分の binding 一覧 |
 | POST | `/api/calendars/google/connect`         | Google OAuth 開始 (redirect URL 返却) |
-| GET  | `/api/calendars/google/callback`        | Google OAuth callback (refresh token 取得 → Infisical) |
+| GET  | `/api/calendars/google/callback`        | Google OAuth callback (refresh token 保管は別設計) |
 | DELETE| `/api/calendars/:id`                   | binding 削除 + link 解除 |
 | POST | `/api/admin/facilities/:id/overlap`     | admin: allow_overlap 切替 |
 
@@ -303,16 +303,15 @@ Google Calendar からの inbound は v0.2 以降。 push notification 受信に
 
 ## 9. 起動とデプロイ
 
-### 9.1 起動モード (Bibliotheca と同型)
+### 9.1 起動モード (Excubitor Vault-only)
 
-- **Mode A**: ローカル `.env` 直
-- **Mode B**: Infisical (env-cli) — 推奨
-- **Mode C**: Excubitor → child process に INFISICAL_* inject
+Excubitor が topology / catalog env / 暗号化 runtime config / Vault の順で env を解決し、
+子プロセスへ注入する。アプリで dotenv 読み込みや secret store 接続は行わない。
 
 `server/bootstrap.ts`:
 
-1. `.env.secrets` (INFISICAL_*) + `.env` を読む
-2. `ensureEnv()` で Infisical から fetch + inject (existing は上書きしない)
+1. Ex 注入済み env の必須項目を検査する (`AEDILIS_ADMIN_IDS` は任意)
+2. 未設定・空白のみなら変数名だけを示すエラーで停止する
 3. `index.ts` を import
 
 ### 9.2 必須 env
@@ -320,12 +319,12 @@ Google Calendar からの inbound は v0.2 以降。 push notification 受信に
 | Key | 役割 |
 |---|---|
 | `CERNERE_BASE_URL` | Cernere の公開鍵 fetch 用 |
-| `AEDILIS_ADMIN_IDS` | カンマ区切り Cernere sub |
-| `SCHEDULA_BASE_URL` | Schedula (予定基盤) の API ベース |
-| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | Google Calendar OAuth |
+| `CERNERE_PROJECT_CLIENT_ID` / `CERNERE_PROJECT_CLIENT_SECRET` | Ex が起動ごとに Cernere から取得・注入する短期資格情報 |
 | `AEDILIS_PUBLIC_URL` | OAuth callback URL の組立用 |
 
-Google `refresh_token` は user × binding ごとに `AEDILIS_GOOGLE_REFRESH_<bindingId>` という名前で **Infisical に書き戻す** (process memory には access token の短期キャッシュのみ持つ — [[feedback_secret_per_user_memory_only]] と同方針)。
+`AEDILIS_ADMIN_IDS` とカレンダー連携設定は任意。非秘密設定は catalog env、秘密情報は
+Ex の Vault binding で管理する。将来の Google refresh token 永続化は別設計とし、
+アプリから旧 secret store へ書き戻す方式は採用しない。
 
 ### 9.3 ポート
 
@@ -338,7 +337,7 @@ loopback **17502** を予約。 17500 (Dropbox) / 17501 (Bibliotheca) と衝突�
 - 個人データは Cernere 単一情報源 ([[project_personal_data_rule]])
 - Aedilis に保存するユーザ識別子は Cernere `sub` (= ULID 相当) のみ
 - display name はキャッシュ目的でのみ保持、 Cernere 側更新で 24h TTL refresh
-- Google refresh token は SQLite には**書かない**、 Infisical secret に書く
+- Google refresh token は SQLite には**書かない**。保管方式は将来の別設計
 - 予約の `purpose` は自由記入 → ログに dump しない、 API レスポンスでも他人には返さない
 
 ---
@@ -353,7 +352,7 @@ loopback **17502** を予約。 17500 (Dropbox) / 17501 (Bibliotheca) と衝突�
 - Google Calendar への outbound sync (OAuth + event create/update/delete)
 - admin: 重複可フラグ切替、 代理キャンセル
 - 最小 SPA (vanilla TS、 Bibliotheca 流の esbuild build)
-- Infisical bootstrap 3 モード対応
+- Excubitor Vault-only env 注入と起動前の必須検査
 
 ### やらない (v0.1)
 
@@ -374,7 +373,7 @@ loopback **17502** を予約。 17500 (Dropbox) / 17501 (Bibliotheca) と衝突�
 | **v0.1 scaffold** | `package.json` / `server/` / `public/` の骨格 + Cernere 認証 + `/api/health` |
 | **v0.2 core** | 予約 CRUD + 重複検知 + Local facility source + 最小 SPA |
 | **v0.3 schedula-sync** | Schedula outbound + (将来 inbound 用の) webhook 受信口 |
-| **v0.4 google-sync** | Google OAuth + outbound (refresh token を Infisical 書込) |
+| **v0.4 google-sync** | Google OAuth + outbound (refresh token 保管は別設計) |
 | **v0.5 admin + polish** | admin route + 表示細部 + Excubitor 登録 + README |
 | **v1.0** | Hub 上で施設予約が「できる」 状態 (5月目標 2 達成) |
 

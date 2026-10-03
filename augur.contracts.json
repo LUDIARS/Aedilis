@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "contracts": [
+    {
+      "id": "C-1",
+      "criterion": "C-1 assertRequiredEnv(env): 必須4変数が非空なら成功し、不足時は変数名のみのエラーで停止する。管理者IDは任意",
+      "symbol": "assertRequiredEnv",
+      "file": "server/lib/env-bootstrap.ts",
+      "module": "contracts/startup-env.contract.ts",
+      "mode": "observe",
+      "sample": 1
+    }
+  ]
+}

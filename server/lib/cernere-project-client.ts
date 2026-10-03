@@ -144,7 +144,7 @@ export class CernereProjectClient {
 
   /**
    * 起動時に 1 回呼ぶ。 初回接続を試み、 以後は切断のたびに固定間隔で自動再接続する。
-   * 接続失敗は throw せず warn ログのみ (Cernere 側の Infisical 値がまだ未投入でも
+   * 接続失敗は throw せず warn ログのみ (Cernere 側の設定がまだ未投入でも
    * Aedilis 自体の起動は止めない — Ostiarius の startCernereSync と同じ思想)。
    */
   start(): void {

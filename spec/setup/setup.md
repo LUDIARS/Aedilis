@@ -3,11 +3,13 @@
 ## 前提
 - Node.js（Hono + better-sqlite3 + esbuild SPA）。Cernere に到達できること。
 
-## 起動（Bibliotheca と同型の env bootstrap）
-Infisical / `.env` / host env の多段。起動時に env-bootstrap が順に拾う。
-```sh
-npm run dev    # tsx watch。public/app.js を build してから起動
-```
+## 起動（Excubitor Vault-only）
+Excubitor の catalog 定義から起動する。Ex が設定と Vault の秘密情報を env に注入し、
+`server/bootstrap.ts` が必須項目を検査してから本体を import する。
+未設定・空文字・空白のみの必須項目は変数名だけを示して停止する。
+非秘密設定は `excubitor.catalog.yaml` の `env:`、秘密情報は Ex の Vault binding が正本。
+注入優先順位は topology < catalog env < 暗号化 runtime config < Vault。
+アプリは dotenv 読み込み・secret store 接続を行わない。
 
 ## env
 | 変数 | 要否 | 用途 |
@@ -26,8 +28,8 @@ npm run dev    # tsx watch。public/app.js を build してから起動
 > Cernere / Ostiarius と同一 eTLD+1 に揃える必要がある。横断 env 配線は
 > [`./webauthn-rp-id.md`](./webauthn-rp-id.md) を参照。
 
-> `CERNERE_PROJECT_CLIENT_*` は Infisical に固定値として保存しない。Excubitor を
-> 介さない直接起動では、Cernere が発行した短期資格情報を環境変数で明示的に渡す。
+> `CERNERE_PROJECT_CLIENT_*` は固定値として保存せず、Excubitor が Cernere から
+> 起動ごとに発行を受けて注入する。`AEDILIS_ADMIN_IDS` は未設定でも起動できる。
 
 ## ポート
 - `17502`（LUDIARS loopback レンジ）。17500 は Dropbox squat、17501 は Bibliotheca。

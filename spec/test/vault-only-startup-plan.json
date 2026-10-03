@@ -1,0 +1,232 @@
+{
+  "summary": "Lead with \"Behavior-preserving characterization tests\" (high), then refactor in behavior-preserving steps. 2 test suggestions, 2 fix steps.",
+  "testPlan": {
+    "suggestions": [
+      {
+        "id": "test-001",
+        "title": "Behavior-preserving characterization tests",
+        "kind": "unit",
+        "priority": "high",
+        "confidence": 0.75,
+        "targetFiles": [
+          "CLAUDE.md",
+          "DESIGN.md",
+          "README.md",
+          "env-cli.config.ts",
+          "excubitor.catalog.yaml",
+          "package.json",
+          "server/bootstrap.ts",
+          "server/index.ts",
+          "server/lib/env-bootstrap.ts"
+        ],
+        "rationale": "A refactor must not change behavior; characterization tests pin the current behavior before code moves.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given the current observable behavior of the refactored area, when the refactored code runs, then outputs match the pre-refactor baseline exactly."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015"
+        ]
+      },
+      {
+        "id": "test-002",
+        "title": "Existing contract checks stay green",
+        "kind": "contract",
+        "priority": "high",
+        "confidence": 0.65,
+        "rationale": "Consumers of the refactored surface must see no difference.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given the public surface of the refactored modules, when existing contract tests run, then all pass unchanged."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015"
+        ]
+      }
+    ]
+  },
+  "fixPolicy": {
+    "strategy": "behavior_preserving",
+    "steps": [
+      {
+        "id": "fix-001",
+        "title": "Pin current behavior",
+        "description": "Add or verify characterization tests over the code to be moved before changing structure.",
+        "targetFiles": [
+          "CLAUDE.md",
+          "DESIGN.md",
+          "README.md",
+          "env-cli.config.ts",
+          "excubitor.catalog.yaml",
+          "package.json",
+          "server/bootstrap.ts",
+          "server/index.ts",
+          "server/lib/env-bootstrap.ts"
+        ],
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015"
+        ]
+      },
+      {
+        "id": "fix-002",
+        "title": "Refactor in reviewable steps",
+        "description": "Restructure in small, individually green steps; never combine behavior changes with structure changes.",
+        "dependsOn": [
+          "fix-001"
+        ],
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010",
+          "ev-011",
+          "ev-012",
+          "ev-013",
+          "ev-014",
+          "ev-015"
+        ]
+      }
+    ],
+    "risks": [
+      {
+        "id": "risk-001",
+        "severity": "medium",
+        "description": "Uncovered behavior in the refactored area can change silently; coverage gaps are the main refactor risk."
+      }
+    ],
+    "rollback": "Each refactor step is independently revertible; revert the latest step on any behavioral difference."
+  },
+  "evidence": [
+    {
+      "id": "ev-001",
+      "type": "objective",
+      "detail": "Caller requested refactor: Replace secret bootstrap with injected-env validation; characterize accepted settings and deliberate fail-fast behavior"
+    },
+    {
+      "id": "ev-002",
+      "type": "project_metadata",
+      "detail": "Project context: domain service; test runners vitest."
+    },
+    {
+      "id": "ev-003",
+      "type": "diff",
+      "detail": "A code diff was supplied with the request."
+    },
+    {
+      "id": "ev-004",
+      "type": "changed_file",
+      "file": "CLAUDE.md",
+      "detail": "Changed file: CLAUDE.md"
+    },
+    {
+      "id": "ev-005",
+      "type": "changed_file",
+      "file": "DESIGN.md",
+      "detail": "Changed file: DESIGN.md"
+    },
+    {
+      "id": "ev-006",
+      "type": "changed_file",
+      "file": "README.md",
+      "detail": "Changed file: README.md"
+    },
+    {
+      "id": "ev-007",
+      "type": "changed_file",
+      "file": "env-cli.config.ts",
+      "detail": "Changed file: env-cli.config.ts"
+    },
+    {
+      "id": "ev-008",
+      "type": "changed_file",
+      "file": "excubitor.catalog.yaml",
+      "detail": "Changed file: excubitor.catalog.yaml"
+    },
+    {
+      "id": "ev-009",
+      "type": "changed_file",
+      "file": "package.json",
+      "detail": "Changed file: package.json"
+    },
+    {
+      "id": "ev-010",
+      "type": "changed_file",
+      "file": "server/bootstrap.ts",
+      "detail": "Changed file: server/bootstrap.ts"
+    },
+    {
+      "id": "ev-011",
+      "type": "changed_file",
+      "file": "server/index.ts",
+      "detail": "Changed file: server/index.ts"
+    },
+    {
+      "id": "ev-012",
+      "type": "changed_file",
+      "file": "server/lib/env-bootstrap.ts",
+      "detail": "Changed file: server/lib/env-bootstrap.ts"
+    },
+    {
+      "id": "ev-013",
+      "type": "changed_file",
+      "file": "spec/feature/service-bootstrap.md",
+      "detail": "Changed file: spec/feature/service-bootstrap.md"
+    },
+    {
+      "id": "ev-014",
+      "type": "changed_file",
+      "file": "spec/setup/meeting-integrations.md",
+      "detail": "Changed file: spec/setup/meeting-integrations.md"
+    },
+    {
+      "id": "ev-015",
+      "type": "changed_file",
+      "file": "spec/setup/setup.md",
+      "detail": "Changed file: spec/setup/setup.md"
+    }
+  ]
+}

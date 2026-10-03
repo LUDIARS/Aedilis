@@ -48,7 +48,7 @@ another service's bot token or a channel webhook.
 1. In Cernere, an administrator grants `identity_claims: ["discord_id"]` to
    Aedilis. The service cannot grant itself this permission.
 2. Users link Discord to their Cernere account and opt in on the meeting page.
-3. Supply `AEDILIS_DISCORD_BOT_TOKEN` via the existing Infisical bootstrap; set
+3. Bind `AEDILIS_DISCORD_BOT_TOKEN` in Excubitor Vault for startup injection; set
    `AEDILIS_DISCORD_ENABLED=true` or `discordEnabled=true` in settings.json.
    Enabled without a credential fails startup explicitly. Disabled is visible in UI.
 4. The bot must be able to open a DM to the linked user; privacy restrictions can

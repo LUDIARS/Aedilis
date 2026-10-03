@@ -39,7 +39,7 @@ function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v || !v.trim()) {
     console.error(
-      `[aedilis] ${name} が未設定です。 Infisical / .env.secrets / .env / host env のいずれかで指定してください。`,
+      `[aedilis] ${name} が未設定です。 Excubitor の環境変数注入設定を確認してください。`,
     );
     process.exit(1);
   }
@@ -66,7 +66,7 @@ const AUDIENCE = requireEnv('AEDILIS_PUBLIC_URL');
 
 // Aedilis 自身の Cernere "aedilis" project 登録用資格情報。 Excubitor が起動のたびに
 // Cernere へ発行させ (catalog の cernere_launch_credentials)、 子 env へ注入する。
-// 固定の長命トークンを Infisical に置かないための方式で、 GLAB / Volputas と同じ。
+// 固定の長命トークンを保存しない方式で、 GLAB / Volputas と同じ。
 // 未設定を黙ってスキップしない (CLAUDE.md の暗黙 fallback 禁止) — fail-fast で扱う。
 const CERNERE_CLIENT_ID = requireEnv('CERNERE_PROJECT_CLIENT_ID');
 const CERNERE_CLIENT_SECRET = requireEnv('CERNERE_PROJECT_CLIENT_SECRET');
