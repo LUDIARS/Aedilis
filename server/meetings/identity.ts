@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { readIdentity } from '../auth.ts';
+import { bookingPrincipal } from '../booking-access/request.ts';
 import { MeetingError, type Actor, type IdentityRow } from './types.ts';
 
 const COOKIE = 'aedilis_meeting_device';
@@ -26,7 +27,8 @@ export async function actorFor(db: Database.Database, c: Context): Promise<Actor
   const identities = userId ? db.prepare('SELECT id, user_id, notify FROM meeting_identity WHERE user_id = ? ORDER BY created_at').all(userId) as IdentityRow[] : [];
   const device = deviceIdentity(db, getCookie(c, COOKIE));
   if (device && !device.user_id && !identities.some(i => i.id === device.id)) identities.push(device);
-  return { identities, current: identities[0] ?? null, userId };
+  const principal = await bookingPrincipal(c);
+  return { identities, current: identities[0] ?? null, userId, groups: principal.groups };
 }
 export function ensureActor(db: Database.Database, c: Context, actor: Actor, secure: boolean): Actor {
   if (actor.current) return actor;

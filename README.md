@@ -102,3 +102,15 @@ npm install
 `excubitor.bootstrap.json` は `scripts/site/setup.mjs` を実行する。Node/npmを前提にロック済み依存を `npm ci --include=dev` で導入し、`build:web` を実行する。非対話・再実行可能で、失敗は非0終了。既存SQLite・秘密・接続設定は変更せず、サービス起動やデータ移行を行わない。SQLiteのスキーマ準備は通常起動時が所有する。
 
 AWS等の別拠点では、起動前にCernereの到達先とExのissuer資格情報を設定する。既存の公開URLの切替や本社データの移行は別途確認する。移行操作は未対応エラーで停止し、空の移行を成功扱いしない。セットアップのみの場合はEx bootstrapの `start:false` を使う。
+
+## GLab organization/team bookings
+
+GLab sends authenticated bookings through the backend connector. Public records can be viewed without login; Internal records require a fresh verified membership in the selected GLab team or Cernere organization; Private records require ownership. Owners retain cancellation rights after leaving a group.
+
+Both services must receive the same random secret (at least 32 bytes) as `GLAB_AEDILIS_CONTEXT_SECRET` through Excubitor Vault. No value belongs in the repository. GLab signs a v1 `x-glab-booking-context` assertion bound to the downstream user, HTTP method, complete path/query, SHA-256 body hash and a 30-second expiration. Aedilis never trusts group fields supplied without a valid assertion. Missing group credentials cannot grant access.
+
+`GET /api/reservations/capabilities` advertises `groupContextVersion: 1`; GLab refuses bookings against older servers. Reservation creation/update and meeting creation/update accept `visibility` and `group: {kind,id}` (or null). The server chooses the group name from the verified assertion. Existing owner-only mutation rules remain. Copying in GLab creates a new draft and validates current membership again on save.
+
+The idempotent `booking_audience` table stores policy only; Aedilis remains the reservation authority. Existing records retain their prior access behavior. The anonymous `GET /api/reservations/public` feed includes only explicitly Public records, and new meeting discovery does not expose historical unlisted meetings. Conflict responses omit other reservations' private content.
+
+When a meeting with a facility is finalized, its booking and visibility are committed in the same database transaction. Reopening or cancelling releases the booking. Linked bookings are changed through their meeting, not separately. Protected meeting notifications are sent only to the owner: the background worker cannot assert fresh group membership.

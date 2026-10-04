@@ -41,7 +41,8 @@ export function managedMeetRoutes(db: Database.Database, client: CernereProjectC
   app.get('/oauth/callback', async c => {
     return c.redirect(await oauth.complete(c, getIdentity(c)));
   });
-  app.get('/:id', c => {
+  app.get('/:id', async c => {
+    repo.requireReadable(c.req.param('id'), await actorFor(db, c));
     const row = repo.get(c.req.param('id'));
     if (row.state === 'cancelled') return c.json({ status: 'cancelled' });
     return c.json(provision.get(row.id));

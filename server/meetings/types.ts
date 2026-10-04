@@ -29,7 +29,7 @@ export interface ResponseRow {
   comment: string; topic: string; answers_json: string; revision: number;
   default_online: number; online_json: string;
 }
-export interface Actor { identities: IdentityRow[]; current: IdentityRow | null; userId: string | null }
+export interface Actor { groups?: import('../booking-access/context.ts').BookingGroup[]; identities: IdentityRow[]; current: IdentityRow | null; userId: string | null }
 export class MeetingError extends Error {
   constructor(public readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 429 | 503, message: string) {
     super(message);

@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { releaseMeetingFacility, reserveMeetingFacility } from './facility-reservation.ts';
 import { owns } from './identity.ts';
+import { ensureBookingAccessSchema, readAudience, canReadBooking } from '../booking-access/policy.ts';
 import { MeetingError, type Actor, type Candidate, type MeetingInput, type MeetingRow, type ResponseInput, type ResponseRow, type Venue } from './types.ts';
 
 export class MeetingRepository {
-  constructor(readonly db: Database.Database) {}
+  constructor(readonly db: Database.Database) { ensureBookingAccessSchema(db); }
   get(id: string): MeetingRow {
     const row = this.db.prepare('SELECT * FROM meeting_poll WHERE id = ?').get(id) as MeetingRow | undefined;
     if (!row) throw new MeetingError(404, '会議が見つかりません');
@@ -40,6 +42,7 @@ export class MeetingRepository {
         const keptOnline = Object.fromEntries(Object.entries(online).filter(([key]) => unchanged.has(key)));
         this.db.prepare('UPDATE meeting_response SET answers_json = ?, online_json = ?, revision = revision + 1 WHERE id = ?').run(JSON.stringify(kept), JSON.stringify(keptOnline), answer.id);
       }
+      releaseMeetingFacility(this.db, id);
       // Any organizer edit reopens scheduling so a stale final choice cannot survive changes.
       this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,online_allowed=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
         .run(input.title, input.description, input.organizerName, Number(input.onlineAllowed), JSON.stringify(input.slots), JSON.stringify(input.venues), Date.now(), id);
@@ -55,6 +58,7 @@ export class MeetingRepository {
       if (!slot) throw new MeetingError(400, '候補を選択してください');
       const venue = (JSON.parse(row.venues_json) as Venue[]).find(v => v.name === slot.venue);
       if (venue?.busy.some(b => b.startAt < slot.endAt && b.endAt > slot.startAt)) throw new MeetingError(409, 'その会場は予定が重複しています');
+      reserveMeetingFacility(this.db, row, slot, actor);
       this.db.prepare("UPDATE meeting_poll SET state='finalized',selected_slot=?,revision=revision+1,updated_at=? WHERE id=?").run(slotId, Date.now(), id);
       this.enqueue(id, 'meeting_finalized', this.responses(id).map(r => r.owner_id), actor);
     })();
@@ -64,6 +68,7 @@ export class MeetingRepository {
       const row = this.get(id);
       this.requireOwner(row, actor); this.requireRevision(row.revision, expected);
       if (row.state === 'cancelled') throw new MeetingError(409, '中止済みの会議です');
+      releaseMeetingFacility(this.db, id);
       this.db.prepare("UPDATE meeting_poll SET state='cancelled',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?").run(Date.now(), id);
       this.enqueue(id, 'meeting_cancelled', this.responses(id).map(r => r.owner_id), actor);
     })();
@@ -113,9 +118,17 @@ export class MeetingRepository {
         .run(randomUUID(), meetingId, owner, event, now, now);
     }
   }
+  requireReadable(id: string, actor: Actor): void {
+    const row = this.get(id);
+    if (!canReadBooking(readAudience(this.db, 'meeting', id), { userId: actor.userId, groups: actor.groups ?? [] }, owns(actor, row.owner_id))) {
+      throw new MeetingError(404, '会議が見つかりません');
+    }
+  }
   view(id: string, actor: Actor): unknown {
+    this.requireReadable(id, actor);
     const row = this.get(id), mine = owns(actor, row.owner_id);
     return {
+      ...readAudience(this.db, 'meeting', id),
       id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1,
       slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
       selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,

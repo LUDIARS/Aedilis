@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { readAudience } from '../booking-access/policy.ts';
 import type { CernereProjectClient } from '../lib/cernere-project-client.ts';
 import type { MeetingConfig } from './config.ts';
 import { discordIdentity, DiscordDeliveryError, sendDiscord } from './discord.ts';
@@ -27,6 +28,14 @@ export function startMeetingOutbox(db: Database.Database, client: CernereProject
           if (!owner?.user_id || !owner.notify) {
             db.prepare("UPDATE meeting_outbox SET status='skipped' WHERE id=?").run(job.id);
             continue;
+          }
+          if (readAudience(db, 'meeting', job.meeting_id).visibility !== 'public') {
+            const host = db.prepare('SELECT i.user_id FROM meeting_poll p JOIN meeting_identity i ON i.id=p.owner_id WHERE p.id=?').get(job.meeting_id) as { user_id: string | null } | undefined;
+            // Background delivery has no fresh group assertion; never notify former members from a stale recipient list.
+            if (host?.user_id !== owner.user_id) {
+              db.prepare("UPDATE meeting_outbox SET status='skipped' WHERE id=?").run(job.id);
+              continue;
+            }
           }
           const recipient = await discordIdentity(client, owner.user_id);
           const url = new URL(`/meeting/${encodeURIComponent(job.meeting_id)}`, config.publicUrl);

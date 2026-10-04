@@ -1,4 +1,7 @@
 import type Database from 'better-sqlite3';
+import { bookingPrincipal } from '../booking-access/request.ts';
+import { parseAudience, readAudience, saveAudience, canReadBooking } from '../booking-access/policy.ts';
+import { owns } from './identity.ts';
 import type { FacilitySource } from '../facility/source.ts';
 import { publicFacilities, validateFacilities } from './facilities.ts';
 import { Hono } from 'hono';
@@ -22,7 +25,8 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
   app.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
-      if (c.req.header('origin') !== origin || c.req.header('sec-fetch-site') === 'cross-site') throw new MeetingError(403, '同じサイトから操作してください');
+      const trustedProxy = !!c.req.header('x-glab-booking-context') && !!(await bookingPrincipal(c)).userId;
+      if (!trustedProxy && (c.req.header('origin') !== origin || c.req.header('sec-fetch-site') === 'cross-site')) throw new MeetingError(403, '同じサイトから操作してください');
       if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json')) throw new MeetingError(400, 'JSON形式で送信してください');
       const now = Date.now();
       for (const [key, value] of limits) if (value.until <= now) limits.delete(key);
@@ -96,20 +100,49 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     for (const identity of actor.identities) {
       const rows = db.prepare(`SELECT DISTINCT p.id,p.title,p.state,p.updated_at FROM meeting_poll p
         LEFT JOIN meeting_response r ON r.meeting_id=p.id WHERE p.owner_id=? OR r.owner_id=? ORDER BY p.updated_at DESC LIMIT 100`).all(identity.id, identity.id) as { id: string }[];
-      for (const row of rows) items.set(row.id, row);
+      for (const row of rows) {
+        const booking = repo.get(row.id);
+        if (canReadBooking(readAudience(db, 'meeting', row.id), { userId: actor.userId, groups: actor.groups ?? [] }, owns(actor, booking.owner_id))) items.set(row.id, row);
+      }
     }
     return c.json({ items: [...items.values()] });
   });
-  app.post('/', async c => {
-    const input = await validateFacilities(meetingInput(await c.req.json()), facilities);
+  app.get('/', async c => {
     const actor = await actorFor(db, c);
-    const id = repo.create(input, actor);
+    const rows = db.prepare('SELECT id,owner_id FROM meeting_poll ORDER BY updated_at DESC LIMIT 200').all() as { id: string; owner_id: string }[];
+    const items = rows.filter(row => owns(actor, row.owner_id) || !!db.prepare('SELECT 1 FROM booking_audience WHERE resource_type=? AND resource_id=?').get('meeting', row.id)).filter(row => canReadBooking(readAudience(db, 'meeting', row.id), { userId: actor.userId, groups: actor.groups ?? [] }, owns(actor, row.owner_id)))
+      .map(row => repo.view(row.id, actor));
+    return c.json({ items });
+  });
+  app.post('/', async c => {
+    const body = object(await c.req.json());
+    const input = await validateFacilities(meetingInput(body), facilities, db);
+    let actor = await actorFor(db, c);
+    if (actor.userId) actor = ensureActor(db, c, actor, secure);
+    let audience;
+    try { audience = parseAudience(body, { userId: actor.userId, groups: actor.groups ?? [] }); }
+    catch { throw new MeetingError(403, '公開範囲と所属を確認してください'); }
+    const id = db.transaction(() => {
+      const id = repo.create(input, actor);
+      saveAudience(db, 'meeting', id, audience);
+      return id;
+    })();
     return c.json({ id }, 201);
   });
+  app.use('/:id', async (c, next) => { repo.requireReadable(c.req.param('id'), await actorFor(db, c)); await next(); });
+  app.use('/:id/*', async (c, next) => { repo.requireReadable(c.req.param('id'), await actorFor(db, c)); await next(); });
   app.get('/:id', async c => c.json(repo.view(c.req.param('id'), await actorFor(db, c))));
   app.patch('/:id', async c => {
     const body = object(await c.req.json());
-    repo.update(c.req.param('id'), await validateFacilities(meetingInput(body), facilities), revision(body.revision), await actorFor(db, c));
+    const actor = await actorFor(db, c), id = c.req.param('id');
+    const input = await validateFacilities(meetingInput(body), facilities, db);
+    let audience;
+    try { audience = parseAudience(body, { userId: actor.userId, groups: actor.groups ?? [] }, readAudience(db, 'meeting', id)); }
+    catch { throw new MeetingError(403, '公開範囲と所属を確認してください'); }
+    db.transaction(() => {
+      repo.update(id, input, revision(body.revision), actor);
+      saveAudience(db, 'meeting', id, audience);
+    })();
     return c.json({ ok: true });
   });
   app.post('/:id/finalize', async c => {
@@ -124,7 +157,9 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
   });
   app.post('/:id/responses', async c => {
     const id = c.req.param('id'), body = object(await c.req.json()), row = repo.get(id);
-    repo.saveResponse(id, responseInput(body, JSON.parse(row.slots_json) as Candidate[]), null, null, revision(body.meetingRevision), await actorFor(db, c));
+    let actor = await actorFor(db, c);
+    if (actor.userId) actor = ensureActor(db, c, actor, secure);
+    repo.saveResponse(id, responseInput(body, JSON.parse(row.slots_json) as Candidate[]), null, null, revision(body.meetingRevision), actor);
     return c.json({ ok: true }, 201);
   });
   app.patch('/:id/responses/:responseId', async c => {
