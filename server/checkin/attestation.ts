@@ -22,7 +22,11 @@ export interface AttestationPayload {
   /** Ostiarius P3 additions. Omitted by legacy attestations. */
   method?: CheckinMethod;
   assurance?: CheckinAssurance;
+  /** Onsite MFA 対応。 欠落 = "attendance" (旧形式互換)。 */
+  purpose?: AttestationPurpose;
 }
+
+export type AttestationPurpose = 'attendance' | 'mfa';
 
 export function b64urlEncode(buf: Buffer): string {
   return buf
@@ -46,6 +50,9 @@ function isPayload(o: unknown): o is AttestationPayload {
   const hasValidAssurance = p.assurance === undefined || (
     typeof p.assurance === 'string' && ['high', 'medium', 'manual', 'low'].includes(p.assurance)
   );
+  const hasValidPurpose = p.purpose === undefined || (
+    typeof p.purpose === 'string' && ['attendance', 'mfa'].includes(p.purpose)
+  );
   return (
     typeof p.sub === 'string' &&
     typeof p.placeId === 'string' &&
@@ -53,7 +60,8 @@ function isPayload(o: unknown): o is AttestationPayload {
     typeof p.nonce === 'string' &&
     typeof p.issuedAt === 'number' &&
     hasValidMethod &&
-    hasValidAssurance
+    hasValidAssurance &&
+    hasValidPurpose
   );
 }
 

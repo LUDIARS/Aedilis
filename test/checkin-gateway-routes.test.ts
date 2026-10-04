@@ -22,10 +22,11 @@ function buildGatewayApp(): { app: Hono; privateKey: KeyObject } {
   return { app, privateKey: pair.privateKey };
 }
 
-function signedAttestation(privateKey: KeyObject): string {
+function signedAttestation(privateKey: KeyObject, over: Partial<AttestationPayload> = {}): string {
   const payload: AttestationPayload = {
     sub: 'student-1', placeId: 'room-101', lanId: 'kiosk-lan', nonce: 'gateway-route-nonce',
     issuedAt: Date.now(), method: 'face', assurance: 'high',
+    ...over,
   };
   const body = b64urlEncode(Buffer.from(JSON.stringify(payload)));
   return `${body}.${b64urlEncode(cryptoSign(null, Buffer.from(body), privateKey))}`;
@@ -53,5 +54,16 @@ describe('gateway check-in routes', () => {
     });
     expect(summary.status).toBe(200);
     expect(await summary.json()).toMatchObject({ ok: true });
+  });
+
+  it('rejects a kiosk attestation whose purpose is not "attendance" (onsite MFA 用)', async () => {
+    const { app, privateKey } = buildGatewayApp();
+    const headers = { authorization: `Bearer ${gatewayToken}`, 'content-type': 'application/json' };
+    const response = await app.request('/api/checkin/gateway-verify', {
+      method: 'POST', headers,
+      body: JSON.stringify({ attestation: signedAttestation(privateKey, { purpose: 'mfa' }) }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'PURPOSE_MISMATCH' });
   });
 });

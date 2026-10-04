@@ -9,6 +9,15 @@
       "module": "contracts/startup-env.contract.ts",
       "mode": "observe",
       "sample": 1
+    },
+    {
+      "id": "C-2",
+      "criterion": "C-2 processCheckin(db, attestation, authorization): purpose 欠落または \"attendance\" は従来通り受理し、それ以外 (例 \"mfa\") は purpose_mismatch (403, code PURPOSE_MISMATCH) で拒否する。browser 経路 (subjectUserId) と kiosk 直送 gateway-verify 経路 (gatewayLanId) の両方に適用される",
+      "symbol": "processCheckin",
+      "file": "server/checkin/service.ts",
+      "module": "contracts/checkin-purpose.contract.ts",
+      "mode": "observe",
+      "sample": 1
     }
   ]
 }

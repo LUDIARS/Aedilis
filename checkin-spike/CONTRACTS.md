@@ -24,6 +24,7 @@ interface AttestationPayload {
   issuedAt: number;   // epoch ms。出席時刻の正本 (ゲートウェイ時計)
   method?: 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password';
   assurance?: 'high' | 'medium' | 'manual' | 'low';
+  purpose?: 'attendance' | 'mfa'; // 欠落 = 'attendance' (旧形式互換)
 }
 ```
 - 署名鍵 = ゲートウェイの永続 Ed25519 秘密鍵。
@@ -31,6 +32,10 @@ interface AttestationPayload {
 - Aedilis は `placeId` が `gateway_registry[lanId].facility_id` と一致する attestation だけを受理する。
 - `method` / `assurance` は payload 末尾に追加する。旧 5 フィールドのみの attestation は
   `passkey` / `medium` として受理する。
+- `purpose` は末尾にさらに追加する。欠落時は `'attendance'` として従来通り受理する。
+  `'attendance'` 以外 (onsite MFA 用 `'mfa'` など) の attestation は Aedilis への出席記録には
+  使えず、`purpose_mismatch` (403) で拒否する ([[onsite-mfa-factor]] 契約F / browser 経路・
+  kiosk 直送 `gateway-verify` 経路の両方)。
 
 ## 2. Cernere — passkey 公開鍵 export (新規エンドポイント)
 

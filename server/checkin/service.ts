@@ -44,11 +44,12 @@ export type CheckinResult =
  * attestation を検証して出席を記録する。
  *   1. decode → lan_id で公開鍵を引いて署名検証 (引けない/不正 → 400)
  *   2. gateway は登録済み施設の attestation だけを発行できる (不一致 → 403)
- *   3. 本人性: browser 経路では payload.sub === authUserId (不一致 → 403)
- *   4. 鮮度: now - issuedAt <= 120s (古い → 400)
- *   5. replay: nonce UNIQUE 挿入 (重複 → 409)
- *   6. 予約照合: 同 user × facility の confirmed 予約 (無ければ walk-in)
- *   7. 記録 → Memoria webhook (fire-and-forget)
+ *   3. purpose: 欠落/"attendance" のみ受理、他 (例 "mfa") は拒否 (不一致 → 403)
+ *   4. 本人性: browser 経路では payload.sub === authUserId (不一致 → 403)
+ *   5. 鮮度: now - issuedAt <= 120s (古い → 400)
+ *   6. replay: nonce UNIQUE 挿入 (重複 → 409)
+ *   7. 予約照合: 同 user × facility の confirmed 予約 (無ければ walk-in)
+ *   8. 記録 → Memoria webhook (fire-and-forget)
  */
 export function processCheckin(
   db: Database.Database,
@@ -81,6 +82,12 @@ export function processCheckin(
 
   if (authorization.gatewayLanId && payload.lanId !== authorization.gatewayLanId) {
     return { ok: false, status: 403, error: 'gateway_mismatch', code: 'GATEWAY_MISMATCH' };
+  }
+
+  // purpose: 欠落 = "attendance" (旧形式互換)。 それ以外 (例 onsite MFA 用 "mfa") は
+  // 出席記録に使わせない — 両経路 (browser / kiosk 直送) 共通でここを通る。
+  if ((payload.purpose ?? 'attendance') !== 'attendance') {
+    return { ok: false, status: 403, error: 'purpose_mismatch', code: 'PURPOSE_MISMATCH' };
   }
 
   // 2. 本人性 — browser 経路では他人の attestation を投げさせない。

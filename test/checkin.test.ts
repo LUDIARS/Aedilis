@@ -198,6 +198,26 @@ describe('processCheckin — full flow', () => {
     expect(listAttendanceForUser(db, USER)[0]).toMatchObject({ method: 'passkey', assurance: 'medium' });
   });
 
+  it('accepts an attestation with purpose omitted (legacy)', () => {
+    const result = processCheckin(db, sign(makePayload()), { subjectUserId: USER });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts an attestation with purpose explicitly "attendance"', () => {
+    const result = processCheckin(db, sign(makePayload({ purpose: 'attendance' })), { subjectUserId: USER });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects an attestation with purpose "mfa" (browser 経路)', () => {
+    const result = processCheckin(db, sign(makePayload({ purpose: 'mfa' })), { subjectUserId: USER });
+    expect(result).toMatchObject({ ok: false, status: 403, code: 'PURPOSE_MISMATCH' });
+  });
+
+  it('rejects an attestation with purpose "mfa" (kiosk 直送 gateway-verify 経路)', () => {
+    const result = processCheckin(db, sign(makePayload({ purpose: 'mfa' })), { gatewayLanId: LAN_ID });
+    expect(result).toMatchObject({ ok: false, status: 403, code: 'PURPOSE_MISMATCH' });
+  });
+
   it('rejects low assurance unless explicitly enabled', () => {
     const previous = process.env.CHECKIN_MIN_ASSURANCE;
     delete process.env.CHECKIN_MIN_ASSURANCE;
