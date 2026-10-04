@@ -97,6 +97,33 @@ export function verifyAttestation(
   }
 }
 
+/**
+ * 署名だけを検証し、 payload を untrusted JSON として返す (形の検査は呼び出し側)。
+ * attestation 以外の gateway 署名物 (位置の宣言など) と共用する。 不正なら null。
+ */
+export function verifySignedJson(token: string, publicKeyPem: string): unknown {
+  const [body, sig, extra] = token.split('.');
+  if (!body || !sig || extra !== undefined) return null;
+  try {
+    const key = createPublicKey({ key: publicKeyPem, format: 'pem' });
+    if (!cryptoVerify(null, Buffer.from(body), key, b64urlDecode(sig))) return null;
+    return JSON.parse(b64urlDecode(body).toString('utf8')) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** 署名検証せず payload を untrusted JSON として取り出す。 不正なら null。 */
+export function peekSignedJson(token: string): unknown {
+  const body = token.split('.')[0];
+  if (!body) return null;
+  try {
+    return JSON.parse(b64urlDecode(body).toString('utf8')) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 /** SPKI PEM 文字列から KeyObject を作って検証する (gateway_registry の保存形式)。 */
 export function verifyAttestationWithPem(
   token: string,

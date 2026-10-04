@@ -29,6 +29,19 @@ Hono。全 `/api/*` は Cernere PASETO 検証（[`auth.md`](auth.md)）。マウ
 > 認可: 予約の変更/削除は所有者 or admin。詳細は [`auth.md`](auth.md) /
 > [`../feature/reservation.md`](../feature/reservation.md)。
 
+## checkin（`/api/checkin`）
+出席チェックイン。I/F の正本は [`../../checkin-spike/CONTRACTS.md`](../../checkin-spike/CONTRACTS.md)
+（§4 attestation、§6 GPS + 写真）。
+
+| Method | Path | 動作 |
+|---|---|---|
+| POST | `/verify` | attestation を検証して出席を記録（browser 経路） |
+| POST | `/gateway-verify` | Ostiarius kiosk 直送（gateway token 必須） |
+| POST | `/gps` | GPS + 写真チェックイン（multipart、`method="gps"`・`assurance="low"`）。エラーは CONTRACTS §6 G3 の固定語彙 |
+| POST | `/events-summary` | Ostiarius outbox の件数のみ（gateway token 必須） |
+| GET | `/mine` | 自分の出席履歴（method / assurance を含む） |
+| GET | `/` | 出席一覧（admin） |
+
 ## 宣言的レンダリング
 Corpus 流の declarative UI（`server/corpus.ts` の panel 宣言）を返す経路あり。
 フロントは Corpus renderer 流用で描画。

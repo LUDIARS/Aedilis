@@ -36,6 +36,8 @@ interface AttestationPayload {
   `'attendance'` 以外 (onsite MFA 用 `'mfa'` など) の attestation は Aedilis への出席記録には
   使えず、`purpose_mismatch` (403) で拒否する ([[onsite-mfa-factor]] 契約F / browser 経路・
   kiosk 直送 `gateway-verify` 経路の両方)。
+- 位置の宣言 (§6 G1、`purpose: "location"`) は同じ署名形式だが attestation ではない。
+  `/api/checkin/verify` / `gateway-verify` に投げられた正規署名の宣言は `purpose_mismatch` (403) で拒否する。
 
 ## 2. Cernere — passkey 公開鍵 export (新規エンドポイント)
 
@@ -141,6 +143,67 @@ CREATE INDEX IF NOT EXISTS attendance_user ON attendance(user_id, checked_in_at)
 ```
 - Memoria は online 直接 write 不可 ([[feedback_memoria_online_flow]]) なので **Imperativus relay 経由**が正。実装者は Memoria の relay 受け口に「presence/attendance ログ」として1件追加する形にする。直接 write になる場合は relay 経由に寄せ、難しければ受信スタブ + TODO を残す。
 - 個人データは userId アンカーのみ ([[project_personal_data_rule]])。
+
+## 6. GPS + 写真チェックイン (Ostiarius / GLAB / Aedilis 共通契約)
+
+neco の決定 (2026-10-04)。スマホは GPS のチェックイン型。スマホの GPS が Ostiarius の返す会場位置と
+一致しているかで判定し、添付写真の Exif 日時と SHA-256 で使い回しを弾く。GPS の出席は
+`method="gps"`・`assurance="low"` で出席に数える。名前・パス・エラーコードは 3 リポで同じ文面を保つ。
+
+### G1. 位置の宣言 (Ostiarius)
+- 設定: `OSTIARIUS_FACILITY_LAT` / `OSTIARIUS_FACILITY_LON` (10 進度) / `OSTIARIUS_FACILITY_RADIUS_M` (整数 m)。
+  3 つ揃わなければ宣言を出さない (GPS チェックイン不可)。
+- 宣言 = §1 と同じ形式 `base64url(JSON payload) + "." + base64url(Ed25519 署名)`、gateway 鍵で署名。
+  payload のキー順は固定: `{ lanId, facilityId, lat, lon, radiusM, issuedAt, purpose: "location" }` (issuedAt は epoch ms)。
+- 公開: `/api/health` の応答に `locationStatement` (無ければ省略)。別途 `GET /api/location` → `{ locationStatement }`。
+- purpose `"location"` は出席・MFA の attestation として受理されない (Aedilis / Cernere とも `purpose_mismatch`)。
+
+### G2. スマホ → GLAB
+- GLAB (HTTPS) の「GPS で出席」: `navigator.geolocation.getCurrentPosition` (enableHighAccuracy) で
+  `{ lat, lon, accuracyM, positionAt }`、`<input type="file" accept="image/*" capture="environment">` で写真 1 枚。
+- `POST` GLAB attendance plugin `/checkin/gps` (multipart、ユーザ認証必須)。GLAB は Ostiarius の health probe で
+  得た最新の `locationStatement` を付けてユーザの token のまま Aedilis へ中継する。写真は保存・ログ出力しない。
+
+### G3. GLAB → Aedilis (`POST /api/checkin/gps`)
+- ユーザの Cernere token (sub がチェックイン本人)。multipart/form-data: fields `locationStatement` `lat` `lon`
+  `accuracyM` `positionAt` (epoch ms の数値文字列、ISO 8601 も可) と file `photo` (`image/jpeg` / `image/heic`、10 MB 以下)。
+- 200 `{ ok: true, attendanceId }` / 4xx `{ error: <code> }`。code は固定語彙:
+
+| code | HTTP | 段階 |
+|---|---|---|
+| `invalid_input` | 400 | 1 (形式) / 4 (positionAt がサーバ時刻 ±5 分の外) |
+| `photo_invalid` | 400 (body 上限超過は 413) | 1 (型・マジックバイト・10 MB) |
+| `statement_invalid` | 400 | 2 (形式・署名・purpose != "location") |
+| `unknown_gateway` | 400 | 2 (lanId 未登録) |
+| `facility_mismatch` | 403 | 2 (facilityId != gateway 登録施設) |
+| `statement_stale` | 400 | 3 (issuedAt がサーバ時刻 ±15 分の外) |
+| `accuracy_too_low` | 400 | 4 (accuracyM > 100) |
+| `out_of_range` | 403 | 4 (haversine 距離 > radiusM + accuracyM) |
+| `exif_missing` | 400 | 5 (DateTimeOriginal なし) |
+| `exif_time_out_of_window` | 400 | 5 (撮影時刻がサーバ時刻 ±10 分の外) |
+| `exif_location_out_of_range` | 403 | 5 (Exif GPS があり、4 と同じ範囲判定で外) |
+| `photo_reused` | 409 | 6 (SHA-256 既出、または同一利用者 × 同一 DateTimeOriginal 既出) |
+| `rate_limited` | 429 | 利用者単位 1 分 5 回 (検証より前に判定) |
+
+- 検証はこの順: 1 入力形式 → 2 宣言の署名・purpose・施設 → 3 鮮度 → 4 位置 → 5 Exif → 6 使い回し → 7 記録。
+- Exif の撮影時刻は `DateTimeOriginal` に `OffsetTimeOriginal` を適用し、無ければ施設のタイムゾーン Asia/Tokyo (+09:00) とみなす。
+- 記録: attendance に `method="gps"`・`assurance="low"`、`checked_in_at` = サーバ受理時刻、`lan_id` = 宣言の lanId、
+  `nonce` = `gps:<sha256>`。予約照合・walk-in・Memoria webhook は §4 と同じ流れ。同日同施設の重複は §4 と同じく制限しない。
+  `CHECKIN_MIN_ASSURANCE` は attestation 経路だけに効き、GPS 経路の low は拒否しない (neco 決定で出席に数える)。
+- 保存: `gps_checkin_photo` に SHA-256・Exif 撮影時刻・判定結果・距離 (m) だけ。写真本体と Exif の位置は保存しない。
+
+```sql
+CREATE TABLE IF NOT EXISTS gps_checkin_photo (
+  photo_sha256  TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  exif_taken_at INTEGER NOT NULL,   -- epoch ms
+  result        TEXT NOT NULL,      -- 'accepted'
+  distance_m    REAL NOT NULL,
+  attendance_id TEXT,
+  created_at    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS gps_checkin_photo_user_taken ON gps_checkin_photo(user_id, exif_taken_at);
+```
 
 ## 共通方針
 - 各リポ feat ブランチ (`feat/checkin-*`)、マージしない (投機実装)。

@@ -54,6 +54,15 @@ interface Attendance {
   lan_id: string;
   checked_in_at: number;
   reservation_id: string | null;
+  method?: string;
+  assurance?: string;
+}
+
+/** 出席の方式と確度 (GPS は assurance "low")。 旧データは method 欠落。 */
+function methodLabel(a: Attendance): string {
+  if (!a.method) return '';
+  const name = a.method === 'gps' ? 'GPS + 写真' : a.method;
+  return a.assurance ? `${name} (確度: ${a.assurance})` : name;
 }
 
 /** Aedilis 自身への呼び出し (Cernere cookie 同送)。 */
@@ -152,6 +161,7 @@ async function refreshHistory(): Promise<void> {
           <div class="card-title">${escapeHtml(a.facility_id)}</div>
           <div class="card-time">${fmt(a.checked_in_at)}</div>
           <div class="card-owner">${a.reservation_id ? '予約照合あり' : 'walk-in'}</div>
+          <div class="card-owner">${escapeHtml(methodLabel(a))}</div>
         </div>`,
       )
       .join('');

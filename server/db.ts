@@ -64,8 +64,22 @@ export interface AttendanceRow {
   created_at: number;
 }
 
-export type CheckinMethod = 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password';
+export type CheckinMethod = 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password' | 'gps';
 export type CheckinAssurance = 'high' | 'medium' | 'manual' | 'low';
+
+/**
+ * GPS チェックインの写真の使い回し検知用 (CONTRACTS §6 G3)。 写真本体・Exif の
+ * 位置は保存しない。 photo_sha256 と (user_id, exif_taken_at) がそれぞれ UNIQUE。
+ */
+export interface GpsCheckinPhotoRow {
+  photo_sha256: string;
+  user_id: string;
+  exif_taken_at: number;
+  result: string;
+  distance_m: number;
+  attendance_id: string | null;
+  created_at: number;
+}
 
 export interface CheckinEventSummaryRow {
   id: string;
@@ -148,6 +162,19 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS checkin_event_summary_gateway
       ON checkin_event_summary(lan_id, received_at);
+
+    -- GPS チェックインの写真の使い回し検知 (CONTRACTS §6 G3-6)。
+    CREATE TABLE IF NOT EXISTS gps_checkin_photo (
+      photo_sha256  TEXT PRIMARY KEY,
+      user_id       TEXT NOT NULL,
+      exif_taken_at INTEGER NOT NULL,
+      result        TEXT NOT NULL,
+      distance_m    REAL NOT NULL,
+      attendance_id TEXT,
+      created_at    INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS gps_checkin_photo_user_taken
+      ON gps_checkin_photo(user_id, exif_taken_at);
   `);
   addColumnIfMissing(db, 'gateway_registry', 'token_hash', "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, 'attendance', 'method', "TEXT NOT NULL DEFAULT 'passkey'");
@@ -482,6 +509,45 @@ export function insertAttendance(
   return db
     .prepare<[string], AttendanceRow>(`SELECT * FROM attendance WHERE id = ?`)
     .get(id) as AttendanceRow;
+}
+
+/** 同じハッシュ、 または同じ利用者 × 同じ Exif 撮影時刻の写真が既出か。 */
+export function isGpsPhotoReused(
+  db: Database.Database,
+  args: { photoSha256: string; userId: string; exifTakenAt: number },
+): boolean {
+  const row = db
+    .prepare<[string, string, number], { found: number }>(
+      `SELECT 1 AS found FROM gps_checkin_photo
+       WHERE photo_sha256 = ? OR (user_id = ? AND exif_taken_at = ?) LIMIT 1`,
+    )
+    .get(args.photoSha256, args.userId, args.exifTakenAt);
+  return row !== undefined;
+}
+
+/** 写真の判定記録を挿入する。 UNIQUE 違反 (競合した再利用) は 'duplicate'。 */
+export function insertGpsCheckinPhoto(
+  db: Database.Database,
+  args: {
+    photoSha256: string;
+    userId: string;
+    exifTakenAt: number;
+    result: string;
+    distanceM: number;
+    attendanceId: string | null;
+  },
+): 'inserted' | 'duplicate' {
+  try {
+    db.prepare(
+      `INSERT INTO gps_checkin_photo
+         (photo_sha256, user_id, exif_taken_at, result, distance_m, attendance_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(args.photoSha256, args.userId, args.exifTakenAt, args.result, args.distanceM, args.attendanceId, Date.now());
+    return 'inserted';
+  } catch (e) {
+    if (e instanceof Error && (e as { code?: string }).code?.startsWith('SQLITE_CONSTRAINT')) return 'duplicate';
+    throw e;
+  }
 }
 
 export function insertCheckinEventSummary(

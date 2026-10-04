@@ -15,7 +15,14 @@ import {
   decodeAttestationPayload,
   verifyAttestationWithPem,
 } from './attestation.ts';
+import { decodeLocationStatement, verifyLocationStatement } from './location-statement.ts';
 import { notifyAttendance } from './notify.ts';
+
+function isSignedLocationStatement(db: Database.Database, token: string): boolean {
+  const statement = decodeLocationStatement(token);
+  const gateway = statement ? getGateway(db, statement.lanId) : null;
+  return gateway !== null && verifyLocationStatement(token, gateway.public_key_pem) !== null;
+}
 
 /** 鮮度しきい値。 issuedAt がこれより古い attestation は拒否 (CONTRACTS §4-3)。 */
 export const FRESHNESS_MS = 120_000;
@@ -60,6 +67,11 @@ export function processCheckin(
   // 1. decode (署名前) → ゲートウェイ公開鍵を引く
   const decoded = decodeAttestationPayload(attestation);
   if (!decoded) {
+    // 位置の宣言 (purpose "location", CONTRACTS §6 G1) は sub/placeId を持たないので
+    // attestation として decode できない。 正規の署名物なら purpose_mismatch で返す。
+    if (isSignedLocationStatement(db, attestation)) {
+      return { ok: false, status: 403, error: 'purpose_mismatch', code: 'PURPOSE_MISMATCH' };
+    }
     return { ok: false, status: 400, error: 'attestation_malformed', code: 'ATTESTATION_MALFORMED' };
   }
   const gateway = getGateway(db, decoded.lanId);

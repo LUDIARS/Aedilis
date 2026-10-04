@@ -18,6 +18,24 @@
       "module": "contracts/checkin-purpose.contract.ts",
       "mode": "observe",
       "sample": 1
+    },
+    {
+      "id": "C-3",
+      "criterion": "C-3 processGpsCheckin(db, input, userId): 拒否は固定語彙のエラーコードのみで返し、受理時は attendance に method=\"gps\"・assurance=\"low\" で記録し、写真行には SHA-256・撮影時刻・判定結果・距離だけを残す (写真本体・Exif 位置は保存しない)",
+      "symbol": "processGpsCheckin",
+      "file": "server/checkin/gps-service.ts",
+      "module": "contracts/gps-checkin.contract.ts",
+      "mode": "observe",
+      "sample": 1
+    },
+    {
+      "id": "C-4",
+      "criterion": "C-4 processCheckin(db, attestation, authorization): purpose \"location\" の位置の宣言は出席として受理しない (署名が正規なら purpose_mismatch 403)",
+      "symbol": "processCheckin",
+      "file": "server/checkin/service.ts",
+      "module": "contracts/location-purpose.contract.ts",
+      "mode": "observe",
+      "sample": 1
     }
   ]
 }

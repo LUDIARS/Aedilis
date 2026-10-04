@@ -1,0 +1,133 @@
+{
+  "summary": "Lead with \"Characterize current behavior around the available evidence\" (medium), then investigate before changing code. 1 test suggestion, 2 fix steps.",
+  "testPlan": {
+    "suggestions": [
+      {
+        "id": "test-001",
+        "title": "Characterize current behavior around the available evidence",
+        "kind": "unit",
+        "priority": "medium",
+        "confidence": 0.45,
+        "rationale": "The objective kind is unknown; tests that pin what the evidence shows create a safe base for whatever comes next.",
+        "draft": {
+          "framework": "vitest",
+          "description": "Given the flows touched by the supplied signals, when they run, then current behavior is recorded as the baseline."
+        },
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010"
+        ]
+      }
+    ]
+  },
+  "fixPolicy": {
+    "strategy": "investigate_first",
+    "steps": [
+      {
+        "id": "fix-001",
+        "title": "Clarify the objective",
+        "description": "Determine whether this is a bug, feature, refactor, or performance concern; the plan differs for each.",
+        "evidenceIds": [
+          "ev-001"
+        ]
+      },
+      {
+        "id": "fix-002",
+        "title": "Gather the missing signal",
+        "description": "Collect the diff, failure log, or measurement that the clarified objective needs.",
+        "dependsOn": [
+          "fix-001"
+        ],
+        "evidenceIds": [
+          "ev-001",
+          "ev-003",
+          "ev-004",
+          "ev-005",
+          "ev-006",
+          "ev-007",
+          "ev-008",
+          "ev-009",
+          "ev-010"
+        ]
+      }
+    ],
+    "risks": [
+      {
+        "id": "risk-001",
+        "severity": "low",
+        "description": "Acting before the objective is clear risks solving the wrong problem; prefer reversible steps."
+      },
+      {
+        "id": "risk-002",
+        "severity": "low",
+        "description": "Evidence is weak across the whole plan; prefer reversible steps until stronger signals exist."
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "ev-001",
+      "type": "objective",
+      "detail": "Caller requested unknown: GPS + photo check-in (POST /api/checkin/gps): location statement verification, EXIF parsing (JPEG/HEIC), photo reuse detection, method gps / assurance low"
+    },
+    {
+      "id": "ev-002",
+      "type": "project_metadata",
+      "detail": "Project context: test runners vitest."
+    },
+    {
+      "id": "ev-003",
+      "type": "diff",
+      "detail": "A code diff was supplied with the request."
+    },
+    {
+      "id": "ev-004",
+      "type": "changed_file",
+      "file": "augur.contracts.json",
+      "detail": "Changed file: augur.contracts.json"
+    },
+    {
+      "id": "ev-005",
+      "type": "changed_file",
+      "file": "checkin-spike/CONTRACTS.md",
+      "detail": "Changed file: checkin-spike/CONTRACTS.md"
+    },
+    {
+      "id": "ev-006",
+      "type": "changed_file",
+      "file": "public/src/checkin.ts",
+      "detail": "Changed file: public/src/checkin.ts"
+    },
+    {
+      "id": "ev-007",
+      "type": "changed_file",
+      "file": "server/checkin/attestation.ts",
+      "detail": "Changed file: server/checkin/attestation.ts"
+    },
+    {
+      "id": "ev-008",
+      "type": "changed_file",
+      "file": "server/checkin/service.ts",
+      "detail": "Changed file: server/checkin/service.ts"
+    },
+    {
+      "id": "ev-009",
+      "type": "changed_file",
+      "file": "server/db.ts",
+      "detail": "Changed file: server/db.ts"
+    },
+    {
+      "id": "ev-010",
+      "type": "changed_file",
+      "file": "server/routes/checkin.ts",
+      "detail": "Changed file: server/routes/checkin.ts"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 // `/api` に mount する (内部で /checkin/* と /admin/gateways をまとめて定義)。
 
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type Database from 'better-sqlite3';
 import { getIdentity, requireAdmin, requireAuth } from '../auth.ts';
 import {
@@ -18,6 +19,9 @@ import {
 import { isValidPublicKeyPem } from '../checkin/attestation.ts';
 import { gatewayTokenFromAuthorization, hashGatewayToken, issueGatewayToken, tokenHashesMatch } from '../checkin/gateway-token.ts';
 import { getCheckinPolicy, processCheckin } from '../checkin/service.ts';
+import { MAX_PHOTO_BYTES, parseGpsCheckinForm } from '../checkin/gps-input.ts';
+import { GPS_ERROR_STATUS, processGpsCheckin } from '../checkin/gps-service.ts';
+import { SlidingWindowLimiter } from '../checkin/rate-limit.ts';
 import type { VantanUserProfile } from '../lib/cernere-project-client.ts';
 
 function numQuery(value: string | undefined): number | undefined {
@@ -80,8 +84,20 @@ async function fetchVantanProfiles(
   return result;
 }
 
-export function makeCheckinRouter(db: Database.Database, vantanProfiles?: VantanProfileLookup): Hono {
+/** GPS チェックインの利用者単位レート制限 (CONTRACTS §6 G3): 1 分 5 回。 */
+export const GPS_RATE_LIMIT = { limit: 5, windowMs: 60_000 } as const;
+
+/** multipart 全体の上限。 写真 10 MB + フィールド分の余裕。 超過は photo_invalid。 */
+const GPS_BODY_LIMIT_BYTES = MAX_PHOTO_BYTES + 64 * 1024;
+
+export function makeCheckinRouter(
+  db: Database.Database,
+  vantanProfiles?: VantanProfileLookup,
+  options: { gpsRateLimiter?: SlidingWindowLimiter } = {},
+): Hono {
   const r = new Hono();
+  const gpsRateLimiter = options.gpsRateLimiter
+    ?? new SlidingWindowLimiter(GPS_RATE_LIMIT.limit, GPS_RATE_LIMIT.windowMs);
 
   // 出席チェックイン本体 — attestation を検証して記録する。
   r.post('/checkin/verify', requireAuth, async (c) => {
@@ -102,6 +118,32 @@ export function makeCheckinRouter(db: Database.Database, vantanProfiles?: Vantan
       matchedReservation: result.matchedReservation,
     });
   });
+
+  // GPS + 写真チェックイン (CONTRACTS §6 G3)。 GLAB がユーザの token のまま中継する。
+  // 写真はメモリ上で検証して捨てる (保存・ログ出力しない)。
+  r.post(
+    '/checkin/gps',
+    requireAuth,
+    async (c, next) => {
+      if (!gpsRateLimiter.tryConsume(getIdentity(c).userId)) {
+        return c.json({ error: 'rate_limited' }, GPS_ERROR_STATUS.rate_limited);
+      }
+      await next();
+    },
+    bodyLimit({
+      maxSize: GPS_BODY_LIMIT_BYTES,
+      onError: (c) => c.json({ error: 'photo_invalid' }, 413),
+    }),
+    async (c) => {
+      const form = await c.req.parseBody().catch(() => null);
+      if (!form) return c.json({ error: 'invalid_input' }, GPS_ERROR_STATUS.invalid_input);
+      const parsed = await parseGpsCheckinForm(form);
+      if (!parsed.ok) return c.json({ error: parsed.error }, GPS_ERROR_STATUS[parsed.error]);
+      const result = processGpsCheckin(db, parsed.input, getIdentity(c).userId);
+      if (!result.ok) return c.json({ error: result.error }, GPS_ERROR_STATUS[result.error]);
+      return c.json({ ok: true, attendanceId: result.attendanceId });
+    },
+  );
 
   // kiosk/Ostiarius 直送経路。gateway ごとに発行した token と登録鍵の両方を要求する。
   r.post('/checkin/gateway-verify', async (c) => {
