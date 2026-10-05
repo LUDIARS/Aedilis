@@ -41,7 +41,9 @@ export function meetingInput(value: unknown): MeetingInput {
   });
   if (new Set(slots.map(s => s.id)).size !== slots.length) throw new MeetingError(400, '候補IDが重複しています');
   if (r.onlineAllowed !== undefined && typeof r.onlineAllowed !== 'boolean') throw new MeetingError(400, 'オンライン参加可否を確認してください');
-  return { title: text(r.title, 150, true), description: text(r.description, 3000), organizerName: text(r.organizerName, 80, true), onlineAllowed: r.onlineAllowed ?? false, slots, venues };
+  if (r.guestResponses !== undefined && typeof r.guestResponses !== 'boolean') throw new MeetingError(400, 'ログインなし回答の設定を確認してください');
+  return { title: text(r.title, 150, true), description: text(r.description, 3000), organizerName: text(r.organizerName, 80, true), onlineAllowed: r.onlineAllowed ?? false,
+    ...(r.guestResponses === undefined ? {} : { guestResponses: r.guestResponses }), slots, venues };
 }
 export function responseInput(value: unknown, slots: Candidate[]): ResponseInput {
   const r = object(value), answers = object(r.answers);

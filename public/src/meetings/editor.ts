@@ -79,6 +79,8 @@ export function fillEditor(draft?: MeetingDraft): void {
   element<HTMLInputElement>('title').value = draft?.title || '';
   element<HTMLInputElement>('organizer').value = draft?.organizerName || '';
   element<HTMLInputElement>('online-allowed').checked = draft?.onlineAllowed ?? false;
+  // A shared Aedilis URL is meant for outside participants, so new meetings start open to guests.
+  element<HTMLInputElement>('guest-responses').checked = draft?.guestResponses ?? true;
   element<HTMLTextAreaElement>('description').value = draft?.description || '';
   element('venues').replaceChildren(); element('slots').replaceChildren();
   if (!draft) {
@@ -102,5 +104,5 @@ export function readEditor(): MeetingDraft {
     id: row.dataset.id || crypto.randomUUID(), startAt: iso(input(row, '.start').value), endAt: iso(input(row, '.end').value), venue: (row.querySelector('select') as HTMLSelectElement).value,
   }));
   const venues = readVenues();
-  return { title: element<HTMLInputElement>('title').value, organizerName: element<HTMLInputElement>('organizer').value, onlineAllowed: element<HTMLInputElement>('online-allowed').checked, description: element<HTMLTextAreaElement>('description').value, slots, venues };
+  return { title: element<HTMLInputElement>('title').value, organizerName: element<HTMLInputElement>('organizer').value, onlineAllowed: element<HTMLInputElement>('online-allowed').checked, guestResponses: element<HTMLInputElement>('guest-responses').checked, description: element<HTMLTextAreaElement>('description').value, slots, venues };
 }

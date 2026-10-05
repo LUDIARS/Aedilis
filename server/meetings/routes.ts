@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { bookingPrincipal } from '../booking-access/request.ts';
 import { parseAudience, readAudience, saveAudience, canReadBooking } from '../booking-access/policy.ts';
 import { owns } from './identity.ts';
+import { requireRegisteredOrganizer, resolveGuestResponses } from './participation-policy.ts';
 import type { FacilitySource } from '../facility/source.ts';
 import { publicFacilities, validateFacilities } from './facilities.ts';
 import { Hono } from 'hono';
@@ -44,7 +45,8 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     console.error('[meetings] request failed', err.name);
     return c.json({ error: '処理に失敗しました。再試行してください' }, 503);
   });
-  app.get('/config', c => c.json({ googleClientId: config.googleClientId, discordEnabled: !!config.discordToken, cernereUrl: config.cernerePublicUrl }));
+  // publicUrl lets proxies such as GLab show the canonical share URL /meeting/{id}.
+  app.get('/config', c => c.json({ publicUrl: origin, googleClientId: config.googleClientId, discordEnabled: !!config.discordToken, cernereUrl: config.cernerePublicUrl }));
   app.get('/facilities', async c => {
     if (!facilities) throw new MeetingError(503, '施設一覧が設定されていません');
     return c.json({ items: await publicFacilities(facilities) });
@@ -118,12 +120,14 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     const body = object(await c.req.json());
     const input = await validateFacilities(meetingInput(body), facilities, db);
     let actor = await actorFor(db, c);
-    if (actor.userId) actor = ensureActor(db, c, actor, secure);
+    requireRegisteredOrganizer(actor);
+    actor = ensureActor(db, c, actor, secure);
     let audience;
     try { audience = parseAudience(body, { userId: actor.userId, groups: actor.groups ?? [] }); }
     catch { throw new MeetingError(403, '公開範囲と所属を確認してください'); }
+    const guestResponses = resolveGuestResponses(input.guestResponses, audience.visibility);
     const id = db.transaction(() => {
-      const id = repo.create(input, actor);
+      const id = repo.create({ ...input, guestResponses }, actor);
       saveAudience(db, 'meeting', id, audience);
       return id;
     })();
@@ -139,8 +143,9 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     let audience;
     try { audience = parseAudience(body, { userId: actor.userId, groups: actor.groups ?? [] }, readAudience(db, 'meeting', id)); }
     catch { throw new MeetingError(403, '公開範囲と所属を確認してください'); }
+    const guestResponses = resolveGuestResponses(input.guestResponses, audience.visibility, repo.get(id).guest_responses === 1);
     db.transaction(() => {
-      repo.update(id, input, revision(body.revision), actor);
+      repo.update(id, { ...input, guestResponses }, revision(body.revision), actor);
       saveAudience(db, 'meeting', id, audience);
     })();
     return c.json({ ok: true });

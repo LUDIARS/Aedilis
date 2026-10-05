@@ -3,7 +3,7 @@ import { addVenue, fillEditor, readEditor, setupDatePicker } from './editor.ts';
 import { setupGoogle } from './google.ts';
 import { setupManagedMeet, renderManagedMeet, refreshManagedAccount } from './managed-meet.ts';
 import { setupFacilities } from './facilities.ts';
-import { refreshAccount, setupAccount } from './account.ts';
+import { isSignedIn, refreshAccount, setupAccount } from './account.ts';
 import { renderMeeting } from './view.ts';
 import { renderResponse, readResponseChoices } from './response-editor.ts';
 
@@ -11,7 +11,7 @@ let meeting: Meeting | null = null;
 let response: Answer | undefined;
 let editing = false;
 function page(id: 'home' | 'editor' | 'meeting'): void { for (const name of ['home', 'editor', 'meeting']) element(name).hidden = name !== id; }
-function selectResponse(answer: Answer | undefined): void { response = answer; if (meeting) renderResponse(meeting, answer); }
+function selectResponse(answer: Answer | undefined): void { response = answer; if (meeting) renderResponse(meeting, answer, isSignedIn()); }
 async function reload(): Promise<void> {
   await refreshManagedAccount();
   const id = location.pathname.match(/^\/meeting\/([0-9a-f-]+)$/i)?.[1];
@@ -35,6 +35,7 @@ async function saveAnswer(): Promise<void> {
   await reload(); status('回答を保存しました。同じ端末から編集できます');
 }
 function editMeeting(isNew: boolean): void {
+  if (isNew && !isSignedIn()) { status('会議を作成するにはCernereに登録・ログインしてください', true); return; }
   editing = !isNew;
   fillEditor(isNew ? undefined : meeting || undefined); page('editor');
   element('editor-title').textContent = isNew ? '日程調整をつくる' : '会議を編集';

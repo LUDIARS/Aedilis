@@ -6,6 +6,8 @@ export interface MeetingInput {
   description: string;
   organizerName: string;
   onlineAllowed: boolean;
+  /** Omitted keeps the stored setting on update and means false on create. */
+  guestResponses?: boolean;
   slots: Candidate[];
   venues: Venue[];
 }
@@ -20,7 +22,7 @@ export interface ResponseInput {
 export interface IdentityRow { id: string; user_id: string | null; notify: number }
 export interface MeetingRow {
   id: string; owner_id: string; title: string; description: string;
-  organizer_name: string; online_allowed: number; slots_json: string; venues_json: string;
+  organizer_name: string; online_allowed: number; guest_responses: number; slots_json: string; venues_json: string;
   state: 'open' | 'finalized' | 'cancelled'; selected_slot: string | null;
   revision: number; created_at: number; updated_at: number;
 }

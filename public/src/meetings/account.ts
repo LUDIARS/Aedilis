@@ -1,9 +1,13 @@
 import { action, element, request, status, type Config } from './model.ts';
 
+let signedIn = false;
+/** Whether this browser is signed in to Cernere; meeting creation requires it. */
+export function isSignedIn(): boolean { return signedIn; }
 export async function refreshAccount(config: Config): Promise<void> {
   const session = await request<{ linked: boolean; notifications: boolean }>('/session', 'POST', {});
-  element('identity').textContent = session.linked ? 'Cernereでログイン中' : 'この端末で利用（ログイン不要）';
-  element('identity-help').textContent = session.linked ? '登録した回答は、別端末でも同じCernereアカウントで編集できます。ログインは15分で失効します。' : 'Cookieを消すと編集できなくなります。Cernereに登録・ログインして、この端末の回答を引き継げます。';
+  signedIn = session.linked;
+  element('identity').textContent = session.linked ? 'Cernereでログイン中' : 'この端末で利用（回答のみ・ログイン不要）';
+  element('identity-help').textContent = session.linked ? '登録した回答は、別端末でも同じCernereアカウントで編集できます。ログインは15分で失効します。' : '会議の作成にはCernereへの登録・ログインが必要です。回答はログインなしでもできます（主催者が許可した会議のみ）。Cookieを消すと編集できなくなります。';
   element('login').hidden = session.linked;
   element<HTMLButtonElement>('login').disabled = !config.cernereUrl;
   if (!config.cernereUrl && !session.linked) element('identity-help').textContent += ' Cernere連携は管理者による公開URLの設定待ちです。';

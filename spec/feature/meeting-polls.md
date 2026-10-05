@@ -97,3 +97,22 @@ reload and editing online availability without changing the venue.
 - Additive `default_online`/`online_json` columns preserve old responses (false/empty
   map). Changed/removed slots invalidate both answers and per-slot overrides while
   retaining the participant's baseline. Unknown slot IDs and nonboolean values fail.
+# Registered organizers and guest responses (2026-10-05)
+
+Instruction: neco, 2026-10-05 「AeをGLabに接続。予定作成者はCr登録済みユーザである必要があるが、
+非ログインでも予定に回答できる設定を用意する」. This supersedes the login-free organizer of
+SPEC-AE-MEETING-01; participant ownership by browser credential is unchanged.
+
+- `POST /api/meetings` requires an authenticated Cernere user (401 otherwise), including
+  requests proxied from GLab. A device cookie alone cannot create a meeting.
+- `guestResponses` (boolean, `meeting_poll.guest_responses`) lets the organizer accept answers
+  from people who are not logged in. When false, creating or updating an answer requires a
+  Cernere login; deleting an existing own answer stays available to its owner.
+- Guest responses require visibility `public` (anyone with the URL). Requesting them on an
+  internal/private meeting is 400; changing visibility away from public turns them off.
+- Omitting the field keeps the stored value on update and means false on create, so older
+  clients never widen access. Meetings created before this column keep login-free answers
+  (additive migration default 1).
+- The Aedilis page asks for Cernere login before opening the creation editor, offers the
+  setting as a checkbox (checked by default for new meetings), and shows whether the meeting
+  accepts login-free answers. Rules live in `server/meetings/participation-policy.ts`.

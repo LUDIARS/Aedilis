@@ -7,9 +7,13 @@ import { request } from '../public/src/meetings/request.ts';
 import type { CernereProjectClient } from '../server/lib/cernere-project-client.ts';
 
 vi.mock('@hono/node-server/conninfo', () => ({ getConnInfo: () => ({ remote: { address: '127.0.0.1' } }) }));
+vi.mock('../server/auth.ts', () => ({
+  readIdentity: async (c: { req: { header(name: string): string | undefined } }) => c.req.header('x-test-user')
+    ? { userId: c.req.header('x-test-user'), isAdmin: false, role: 'general', displayName: null, projectKey: 'aedilis' } : null,
+}));
 afterEach(() => vi.unstubAllGlobals());
 
-it('creates through the mounted frontend API, reloads, and edits online availability separately from venues', async () => {
+it('creates as a Cernere user through the mounted frontend API, reloads, and edits online availability separately from venues', async () => {
   const db = new Database(':memory:');
   try {
     migrateMeetings(db); migrateMeetings(db);
@@ -21,7 +25,7 @@ it('creates through the mounted frontend API, reloads, and edits online availabi
     }, client));
     let cookie = '';
     vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
-      const headers = new Headers(init.headers); headers.set('origin', origin); headers.set('cookie', cookie);
+      const headers = new Headers(init.headers); headers.set('origin', origin); headers.set('cookie', cookie); headers.set('x-test-user', 'cr-organizer');
       const result = await app.request(origin + path, { ...init, headers });
       cookie = result.headers.get('set-cookie')?.split(';')[0] || cookie;
       return result;

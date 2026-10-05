@@ -7,6 +7,7 @@
     { "pathPattern": "(^|/)server/meetings/[^/]+$" },
     { "pathPattern": "(^|/)public/src/meetings/[^/]+$" },
     { "pathPattern": "(^|/)public/meetings\\.(html|css)$" },
-    { "pathPattern": "(^|/)test/meetings\\.test\\.ts$" }
+    { "pathPattern": "(^|/)test/meetings\\.test\\.ts$" },
+    { "pathPattern": "(^|/)test/meeting-participation\\.test\\.ts$" }
   ]
 }

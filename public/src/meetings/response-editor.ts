@@ -1,9 +1,11 @@
 import { element, escape, dateMarkup, type Answer, type Meeting } from './model.ts';
 
 const choices = { yes: ['○', '参加できる'], maybe: ['△', '調整できれば参加'], no: ['×', '参加できない'] } as const;
-export function renderResponse(meeting: Meeting, response: Answer | undefined): void {
-  const open = meeting.state === 'open';
-  element('response-title').textContent = !open ? '回答受付は終了しました' : response ? '自分の回答を編集' : 'あなたの都合を教えてください';
+export function renderResponse(meeting: Meeting, response: Answer | undefined, signedIn: boolean): void {
+  const loginRequired = !meeting.guestResponses && !signedIn;
+  const open = meeting.state === 'open' && !loginRequired;
+  element('response-title').textContent = meeting.state !== 'open' ? '回答受付は終了しました'
+    : loginRequired ? 'この会議への回答にはCernereへのログインが必要です' : response ? '自分の回答を編集' : 'あなたの都合を教えてください';
   element<HTMLInputElement>('response-name').value = response?.name || '';
   element<HTMLTextAreaElement>('response-comment').value = response?.comment || '';
   element<HTMLTextAreaElement>('response-topic').value = response?.topic || '';

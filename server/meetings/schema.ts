@@ -39,6 +39,10 @@ export function migrateMeetings(db: Database.Database): void {
   if (!columns.some(column => column.name === 'online_allowed')) {
     db.exec('ALTER TABLE meeting_poll ADD COLUMN online_allowed INTEGER NOT NULL DEFAULT 0 CHECK (online_allowed IN (0,1))');
   }
+  // Meetings created before this setting accepted login-free answers; keep that behavior.
+  if (!columns.some(column => column.name === 'guest_responses')) {
+    db.exec('ALTER TABLE meeting_poll ADD COLUMN guest_responses INTEGER NOT NULL DEFAULT 1 CHECK (guest_responses IN (0,1))');
+  }
   const responseColumns = db.prepare('PRAGMA table_info(meeting_response)').all() as { name: string }[];
   if (!responseColumns.some(column => column.name === 'default_online')) {
     db.exec('ALTER TABLE meeting_response ADD COLUMN default_online INTEGER NOT NULL DEFAULT 0 CHECK (default_online IN (0,1))');

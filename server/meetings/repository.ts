@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { releaseMeetingFacility, reserveMeetingFacility } from './facility-reservation.ts';
 import { owns } from './identity.ts';
+import { requireResponder } from './participation-policy.ts';
 import { ensureBookingAccessSchema, readAudience, canReadBooking } from '../booking-access/policy.ts';
 import { MeetingError, type Actor, type Candidate, type MeetingInput, type MeetingRow, type ResponseInput, type ResponseRow, type Venue } from './types.ts';
 
@@ -24,8 +25,8 @@ export class MeetingRepository {
   create(input: MeetingInput, actor: Actor): string {
     if (!actor.current) throw new MeetingError(401, 'ブラウザのCookieを有効にしてください');
     const id = randomUUID(), now = Date.now();
-    this.db.prepare(`INSERT INTO meeting_poll(id,owner_id,title,description,organizer_name,online_allowed,slots_json,venues_json,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(id, actor.current.id, input.title, input.description, input.organizerName, Number(input.onlineAllowed), JSON.stringify(input.slots), JSON.stringify(input.venues), now, now);
+    this.db.prepare(`INSERT INTO meeting_poll(id,owner_id,title,description,organizer_name,online_allowed,guest_responses,slots_json,venues_json,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id, actor.current.id, input.title, input.description, input.organizerName, Number(input.onlineAllowed), Number(input.guestResponses ?? false), JSON.stringify(input.slots), JSON.stringify(input.venues), now, now);
     return id;
   }
   update(id: string, input: MeetingInput, expected: number, actor: Actor): void {
@@ -44,8 +45,8 @@ export class MeetingRepository {
       }
       releaseMeetingFacility(this.db, id);
       // Any organizer edit reopens scheduling so a stale final choice cannot survive changes.
-      this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,online_allowed=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
-        .run(input.title, input.description, input.organizerName, Number(input.onlineAllowed), JSON.stringify(input.slots), JSON.stringify(input.venues), Date.now(), id);
+      this.db.prepare(`UPDATE meeting_poll SET title=?,description=?,organizer_name=?,online_allowed=?,guest_responses=?,slots_json=?,venues_json=?,state='open',selected_slot=NULL,revision=revision+1,updated_at=? WHERE id=?`)
+        .run(input.title, input.description, input.organizerName, Number(input.onlineAllowed), Number(input.guestResponses ?? row.guest_responses === 1), JSON.stringify(input.slots), JSON.stringify(input.venues), Date.now(), id);
       this.enqueue(id, 'meeting_changed', this.responses(id).map(r => r.owner_id), actor);
     })();
   }
@@ -78,6 +79,7 @@ export class MeetingRepository {
       const meeting = this.get(id);
       this.requireRevision(meeting.revision, meetingRevision);
       if (meeting.state !== 'open') throw new MeetingError(409, 'この会議の回答受付は終了しています');
+      requireResponder(meeting.guest_responses === 1, actor);
       if (!actor.current) throw new MeetingError(401, 'Cookieを有効にしてください');
       if (responseId) {
         const row = this.response(id, responseId);
@@ -129,7 +131,7 @@ export class MeetingRepository {
     const row = this.get(id), mine = owns(actor, row.owner_id);
     return {
       ...readAudience(this.db, 'meeting', id),
-      id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1,
+      id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1, guestResponses: row.guest_responses === 1,
       slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
       selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,
       responses: this.responses(id).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), defaultOnline: r.default_online === 1, online: JSON.parse(r.online_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),
