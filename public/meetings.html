@@ -49,6 +49,8 @@
       </form>
     </section>
     <section id="meeting" hidden>
+      <section id="discord-handoff" class="card" hidden><h2>Discordの本人として回答</h2><p>Discordでボタンを押したアカウントを、この予定の回答者に紐づけます。Cernereログインは不要です。既存の匿名回答やCernereの回答は統合しません。</p><p>この本人用リンクは5分間・1回限りです。他の人に共有しないでください。</p><div class="actions"><button id="discord-handoff-accept" type="button" class="primary">Discordの本人として回答する</button><button id="discord-handoff-cancel" type="button">紐づけずに開く</button></div></section>
+      <section id="discord-respondent" class="card" hidden><strong id="discord-respondent-name"></strong><p>この予定への回答だけに使います。同じDiscordアカウントから新しいリンクを取得すると、別端末でも回答を編集できます。この端末での本人確認は12時間有効です。</p><button id="discord-disconnect" type="button">この端末でのDiscord回答を終了</button></section>
       <div class="meeting-heading"><p class="eyebrow" id="meeting-state"></p><h1 id="meeting-title"></h1><p id="meeting-description" class="multiline"></p><p id="meeting-organizer"></p><p id="meeting-online"></p></div>
       <div class="share card"><label>共有URL<input id="share-url" readonly></label><button id="copy-link">URLをコピー</button></div>
       <section id="managed-meet" class="card" hidden><h2>Google Meet</h2><p id="meet-result" role="status"></p><a id="meet-link" target="_blank" rel="noopener noreferrer" hidden>Meetに参加する</a><button id="meet-create" type="button" hidden>Google Meetを作成</button><p class="hint">文字起こしは主催者・共同主催者がWebから参加すると開始されます。参加者にはMeet上で通知されます。</p></section>

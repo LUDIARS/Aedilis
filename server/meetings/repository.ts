@@ -134,6 +134,7 @@ export class MeetingRepository {
       id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1, guestResponses: row.guest_responses === 1,
       slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
       selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,
+      discordRespondent: actor.discord ?? null,
       responses: this.responses(id).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), defaultOnline: r.default_online === 1, online: JSON.parse(r.online_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),
     };
   }

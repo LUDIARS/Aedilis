@@ -6,6 +6,7 @@ import { setupFacilities } from './facilities.ts';
 import { isSignedIn, refreshAccount, setupAccount } from './account.ts';
 import { renderMeeting } from './view.ts';
 import { renderResponse, readResponseChoices } from './response-editor.ts';
+import { takeDiscordHandoff, offerDiscordHandoff, showDiscordRespondent } from './discord-handoff.ts';
 
 let meeting: Meeting | null = null;
 let response: Answer | undefined;
@@ -23,6 +24,7 @@ async function reload(): Promise<void> {
   }
   meeting = await request<Meeting>(`/${encodeURIComponent(id)}`);
   page('meeting'); renderMeeting(meeting, selectResponse);
+  showDiscordRespondent(meeting, reload);
   await renderManagedMeet(meeting);
   selectResponse(meeting.responses.find(r => r.id === response?.id && r.canEdit) || meeting.responses.find(r => r.canEdit));
 }
@@ -42,6 +44,7 @@ function editMeeting(isNew: boolean): void {
   element('save-meeting').textContent = isNew ? '作成して共有する' : '変更を保存';
 }
 async function main(): Promise<void> {
+  const handoffCode = takeDiscordHandoff();
   const config = await request<Config>('/config');
   await refreshAccount(config); setupAccount(config, reload); setupGoogle(config);
   await setupManagedMeet();
@@ -84,5 +87,7 @@ async function main(): Promise<void> {
   element('copy-link').onclick = () => { void action(async () => { await navigator.clipboard.writeText(element<HTMLInputElement>('share-url').value); status('共有URLをコピーしました'); }); };
   window.addEventListener('popstate', () => { void action(reload); });
   await reload();
+  const handoffMeetingId = location.pathname.match(/^\/meeting\/([0-9a-f-]{36})$/i)?.[1];
+  if (handoffCode && handoffMeetingId) offerDiscordHandoff(handoffCode, handoffMeetingId, reload);
 }
 void action(main);

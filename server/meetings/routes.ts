@@ -14,6 +14,7 @@ import { actorFor, ensureActor, linkActor } from './identity.ts';
 import { beginLogin, completeLogin } from './cernere-login.ts';
 import type { MeetingConfig } from './config.ts';
 import { discordIdentity } from './discord.ts';
+import { registerDiscordHandoff } from './discord-handoff.ts';
 import { MeetingRepository } from './repository.ts';
 import { MeetingError, type Candidate } from './types.ts';
 import { meetingInput, object, responseInput, revision, text } from './validation.ts';
@@ -133,6 +134,7 @@ export function makeMeetingRouter(db: Database.Database, config: MeetingConfig, 
     })();
     return c.json({ id }, 201);
   });
+  registerDiscordHandoff(app, db, config);
   app.use('/:id', async (c, next) => { repo.requireReadable(c.req.param('id'), await actorFor(db, c)); await next(); });
   app.use('/:id/*', async (c, next) => { repo.requireReadable(c.req.param('id'), await actorFor(db, c)); await next(); });
   app.get('/:id', async c => c.json(repo.view(c.req.param('id'), await actorFor(db, c))));

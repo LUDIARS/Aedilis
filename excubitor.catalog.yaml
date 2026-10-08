@@ -18,11 +18,15 @@ services:
     allow_hot_reload: true
     # 起動時に Cernere で credential を発行するため、Cernere が先に居る必要がある。
     # CERNERE_BASE_URL も Cernere の provides から topology 経由で届く。
-    depends_on: [cernere]
+    depends_on: [cernere, concordia]
     autostart: false
     env:
       AEDILIS_PUBLIC_URL: https://ae.ai-run-do.com
       AEDILIS_CERNERE_PUBLIC_URL: https://cr.ai-run-do.com
+      # Scoped respondent capabilities are issued only by the configured HQ guild.
+      # CONCORDIA_URL is injected from Concordia's service-owned provides entry.
+      AEDILIS_DISCORD_HANDOFF_ENABLED: "true"
+      AEDILIS_DISCORD_GUILD_ID: "1136199339417534606"
     health:
       type: tcp
       interval_sec: 30

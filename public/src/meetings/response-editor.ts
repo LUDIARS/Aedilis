@@ -6,7 +6,7 @@ export function renderResponse(meeting: Meeting, response: Answer | undefined, s
   const open = meeting.state === 'open' && !loginRequired;
   element('response-title').textContent = meeting.state !== 'open' ? '回答受付は終了しました'
     : loginRequired ? 'この会議への回答にはCernereへのログインが必要です' : response ? '自分の回答を編集' : 'あなたの都合を教えてください';
-  element<HTMLInputElement>('response-name').value = response?.name || '';
+  element<HTMLInputElement>('response-name').value = response?.name || meeting.discordRespondent?.displayName || '';
   element<HTMLTextAreaElement>('response-comment').value = response?.comment || '';
   element<HTMLTextAreaElement>('response-topic').value = response?.topic || '';
   const base = element<HTMLInputElement>('response-default-online'); base.checked = response?.defaultOnline ?? false;
