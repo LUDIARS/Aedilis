@@ -5,65 +5,62 @@ import { b64urlEncode, type AttestationPayload } from '../server/checkin/attesta
 import { hashGatewayToken } from '../server/checkin/gateway-token.ts';
 import { openDb, upsertGateway } from '../server/db.ts';
 import { makeCheckinRouter } from '../server/routes/checkin.ts';
-
 const gatewayToken = 'gateway_route_test_token_12345678901234567890';
-
-function buildGatewayApp(): { app: Hono; privateKey: KeyObject } {
-  const pair = generateKeyPairSync('ed25519');
-  const db = openDb(':memory:');
-  upsertGateway(db, {
-    lanId: 'kiosk-lan',
-    facilityId: 'room-101',
-    publicKeyPem: pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
-    tokenHash: hashGatewayToken(gatewayToken),
-  });
-  const app = new Hono();
-  app.route('/api', makeCheckinRouter(db));
-  return { app, privateKey: pair.privateKey };
+async function buildGatewayApp(): Promise<{
+    app: Hono;
+    privateKey: KeyObject;
+}> {
+    const pair = generateKeyPairSync('ed25519');
+    const db = openDb(':memory:');
+    (await upsertGateway(db, {
+        lanId: 'kiosk-lan',
+        facilityId: 'room-101',
+        publicKeyPem: pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        tokenHash: hashGatewayToken(gatewayToken),
+    }));
+    const app = new Hono();
+    app.route('/api', makeCheckinRouter(db));
+    return { app, privateKey: pair.privateKey };
 }
-
 function signedAttestation(privateKey: KeyObject, over: Partial<AttestationPayload> = {}): string {
-  const payload: AttestationPayload = {
-    sub: 'student-1', placeId: 'room-101', lanId: 'kiosk-lan', nonce: 'gateway-route-nonce',
-    issuedAt: Date.now(), method: 'face', assurance: 'high',
-    ...over,
-  };
-  const body = b64urlEncode(Buffer.from(JSON.stringify(payload)));
-  return `${body}.${b64urlEncode(cryptoSign(null, Buffer.from(body), privateKey))}`;
+    const payload: AttestationPayload = {
+        sub: 'student-1', placeId: 'room-101', lanId: 'kiosk-lan', nonce: 'gateway-route-nonce',
+        issuedAt: Date.now(), method: 'face', assurance: 'high',
+        ...over,
+    };
+    const body = b64urlEncode(Buffer.from(JSON.stringify(payload)));
+    return `${body}.${b64urlEncode(cryptoSign(null, Buffer.from(body), privateKey))}`;
 }
-
 describe('gateway check-in routes', () => {
-  it('requires a gateway token before accepting a kiosk attestation', async () => {
-    const { app, privateKey } = buildGatewayApp();
-    const response = await app.request('/api/checkin/gateway-verify', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ attestation: signedAttestation(privateKey) }),
+    it('requires a gateway token before accepting a kiosk attestation', async () => {
+        const { app, privateKey } = (await buildGatewayApp());
+        const response = await app.request('/api/checkin/gateway-verify', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ attestation: signedAttestation(privateKey) }),
+        });
+        expect(response.status).toBe(401);
     });
-    expect(response.status).toBe(401);
-  });
-
-  it('accepts a registered gateway attestation and count-only event summary', async () => {
-    const { app, privateKey } = buildGatewayApp();
-    const headers = { authorization: `Bearer ${gatewayToken}`, 'content-type': 'application/json' };
-    const verify = await app.request('/api/checkin/gateway-verify', {
-      method: 'POST', headers, body: JSON.stringify({ attestation: signedAttestation(privateKey) }),
+    it('accepts a registered gateway attestation and count-only event summary', async () => {
+        const { app, privateKey } = (await buildGatewayApp());
+        const headers = { authorization: `Bearer ${gatewayToken}`, 'content-type': 'application/json' };
+        const verify = await app.request('/api/checkin/gateway-verify', {
+            method: 'POST', headers, body: JSON.stringify({ attestation: signedAttestation(privateKey) }),
+        });
+        expect(verify.status).toBe(200);
+        const summary = await app.request('/api/checkin/events-summary', {
+            method: 'POST', headers, body: JSON.stringify({ counts: { face_verified: 4, retry: 1 } }),
+        });
+        expect(summary.status).toBe(200);
+        expect(await summary.json()).toMatchObject({ ok: true });
     });
-    expect(verify.status).toBe(200);
-    const summary = await app.request('/api/checkin/events-summary', {
-      method: 'POST', headers, body: JSON.stringify({ counts: { face_verified: 4, retry: 1 } }),
+    it('rejects a kiosk attestation whose purpose is not "attendance" (onsite MFA 用)', async () => {
+        const { app, privateKey } = (await buildGatewayApp());
+        const headers = { authorization: `Bearer ${gatewayToken}`, 'content-type': 'application/json' };
+        const response = await app.request('/api/checkin/gateway-verify', {
+            method: 'POST', headers,
+            body: JSON.stringify({ attestation: signedAttestation(privateKey, { purpose: 'mfa' }) }),
+        });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: 'PURPOSE_MISMATCH' });
     });
-    expect(summary.status).toBe(200);
-    expect(await summary.json()).toMatchObject({ ok: true });
-  });
-
-  it('rejects a kiosk attestation whose purpose is not "attendance" (onsite MFA 用)', async () => {
-    const { app, privateKey } = buildGatewayApp();
-    const headers = { authorization: `Bearer ${gatewayToken}`, 'content-type': 'application/json' };
-    const response = await app.request('/api/checkin/gateway-verify', {
-      method: 'POST', headers,
-      body: JSON.stringify({ attestation: signedAttestation(privateKey, { purpose: 'mfa' }) }),
-    });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: 'PURPOSE_MISMATCH' });
-  });
 });

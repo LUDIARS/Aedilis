@@ -15,4 +15,7 @@ export function assertRequiredEnv(
     // Only allow-listed names belong in diagnostics; never include env values.
     throw new Error(`[bootstrap] Missing required environment: ${missing.join(', ')}`);
   }
+  const backend = env.AEDILIS_DB_BACKEND?.trim() || 'sqlite';
+  if (backend !== 'sqlite' && backend !== 'postgres') throw new Error('[bootstrap] Unsupported AEDILIS_DB_BACKEND');
+  if (backend === 'postgres' && !env.AEDILIS_DATABASE_URL?.trim()) throw new Error('[bootstrap] Missing required environment: AEDILIS_DATABASE_URL');
 }

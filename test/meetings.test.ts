@@ -6,118 +6,131 @@ import { MeetingRepository } from '../server/meetings/repository.ts';
 import { deviceIdentity } from '../server/meetings/identity.ts';
 import { meetingInput, responseInput } from '../server/meetings/validation.ts';
 import type { Actor, MeetingInput, ResponseInput } from '../server/meetings/types.ts';
-
 let db: Database.Database;
 let repo: MeetingRepository;
 let host: Actor, participant: Actor, stranger: Actor;
 const draft: MeetingInput = {
-  // These cases exercise login-free participant ownership, which the organizer enables explicitly.
-  title: 'Meeting', description: '', organizerName: 'Host', onlineAllowed: false, guestResponses: true,
-  slots: [{ id: 'slot-a', startAt: '2026-10-01T01:00:00.000Z', endAt: '2026-10-01T02:00:00.000Z', venue: 'Room' }],
-  venues: [{ name: 'Room', busy: [] }],
+    // These cases exercise login-free participant ownership, which the organizer enables explicitly.
+    title: 'Meeting', description: '', organizerName: 'Host', onlineAllowed: false, guestResponses: true,
+    slots: [{ id: 'slot-a', startAt: '2026-10-01T01:00:00.000Z', endAt: '2026-10-01T02:00:00.000Z', venue: 'Room' }],
+    venues: [{ name: 'Room', busy: [] }],
 };
 const answer: ResponseInput = { name: 'Alex', comment: 'Hello', topic: 'Agenda', answers: { 'slot-a': 'yes' } };
-function actor(id: string, userId: string | null = null, notify = 0): Actor {
-  db.prepare('INSERT INTO meeting_identity VALUES(?,?,?,?)').run(id, userId, notify, Date.now());
-  const identity = { id, user_id: userId, notify };
-  return { identities: [identity], current: identity, userId };
+async function actor(id: string, userId: string | null = null, notify = 0): Promise<Actor> {
+    (await db.prepare('INSERT INTO meeting_identity VALUES(?,?,?,?)').run(id, userId, notify, Date.now()));
+    const identity = { id, user_id: userId, notify };
+    return { identities: [identity], current: identity, userId };
 }
-beforeEach(() => {
-  db = new Database(':memory:'); db.pragma('foreign_keys=ON'); migrateMeetings(db);
-  repo = new MeetingRepository(db);
-  host = actor('host', 'cernere-host', 1); participant = actor('participant'); stranger = actor('stranger');
+beforeEach(async () => {
+    db = new Database(':memory:');
+    db.pragma('foreign_keys=ON');
+    migrateMeetings(db);
+    repo = new MeetingRepository(db);
+    host = (await actor('host', 'cernere-host', 1));
+    participant = (await actor('participant'));
+    stranger = (await actor('stranger'));
 });
 afterEach(() => db.close());
-
 describe('meeting ownership and revisions', () => {
-  it('preserves legacy records during online response migration, including repeated migrations', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    db.exec('ALTER TABLE meeting_response DROP COLUMN default_online; ALTER TABLE meeting_response DROP COLUMN online_json');
-    migrateMeetings(db); migrateMeetings(db);
-    const saved = repo.responses(id)[0];
-    expect(saved?.default_online).toBe(0); expect(saved?.online_json).toBe('{}');
-    expect(JSON.parse(saved?.answers_json || '{}')).toEqual(answer.answers);
-  });
-  it('stores per-date online overrides independently, validates them, and clears changed-slot overrides', () => {
-    const twoSlots = { ...draft, slots: [...draft.slots, { ...draft.slots[0]!, id: 'slot-b' }] };
-    const id = repo.create(twoSlots, host);
-    const input = responseInput({ ...answer, answers: { 'slot-a': 'yes', 'slot-b': 'maybe' }, defaultOnline: true, online: { 'slot-a': false } }, twoSlots.slots);
-    repo.saveResponse(id, input, null, null, 1, participant);
-    const saved = repo.responses(id)[0];
-    expect(saved?.default_online).toBe(1); expect(JSON.parse(saved?.online_json || '{}')).toEqual({ 'slot-a': false });
-    expect(repo.view(id, participant)).toMatchObject({ responses: [{ defaultOnline: true, online: { 'slot-a': false } }] });
-    expect(() => responseInput({ ...input, online: { unknown: true } }, twoSlots.slots)).toThrow('ONLINE');
-    expect(() => responseInput({ ...input, online: { 'slot-a': 'true' } }, twoSlots.slots)).toThrow('ONLINE');
-    expect(() => responseInput({ ...input, defaultOnline: 'true' }, twoSlots.slots)).toThrow('ONLINE');
-    repo.update(id, { ...twoSlots, slots: twoSlots.slots.map(s => s.id === 'slot-a' ? { ...s, endAt: '2026-10-01T03:00:00.000Z' } : s) }, 1, host);
-    const changed = repo.responses(id)[0];
-    expect(JSON.parse(changed?.online_json || '{}')).toEqual({});
-    expect(JSON.parse(changed?.answers_json || '{}')).toEqual({ 'slot-b': 'maybe' });
-    expect(changed?.default_online).toBe(1);
-  });
-  it('rejects another browser changing or deleting an answer, even with the same name', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    const row = repo.responses(id)[0]; if (!row) throw new Error('missing answer');
-    expect(() => repo.saveResponse(id, answer, row.id, 1, 1, stranger)).toThrow('編集権限');
-    expect(() => repo.deleteResponse(id, row.id, 1, stranger)).toThrow('編集権限');
-    expect(() => repo.cancel(id, 1, participant)).toThrow('編集権限');
-    expect(repo.responses(id)).toHaveLength(1);
-  });
-  it('rejects stale edits and atomically invalidates answers to changed slots', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    const changed = { ...draft, slots: draft.slots.map(s => ({ ...s, endAt: '2026-10-01T03:00:00.000Z' })) };
-    repo.update(id, changed, 1, host);
-    expect(JSON.parse(repo.responses(id)[0]?.answers_json || 'null')).toEqual({});
-    expect(() => repo.update(id, draft, 1, host)).toThrow('別の端末');
-    expect(() => repo.saveResponse(id, answer, null, null, 1, stranger)).toThrow('別の端末');
-  });
-  it('allows another authenticated device with the linked identity to edit', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    db.prepare('UPDATE meeting_identity SET user_id=? WHERE id=?').run('linked-user', 'participant');
-    const otherDevice: Actor = { userId: 'linked-user', current: null, identities: [{ id: 'participant', user_id: 'linked-user', notify: 0 }] };
-    const row = repo.responses(id)[0]; if (!row) throw new Error('missing answer');
-    repo.deleteResponse(id, row.id, 1, otherDevice);
-    expect(repo.responses(id)).toHaveLength(0);
-  });
-  it('refuses a final venue collision and preserves meeting state', () => {
-    const input = { ...draft, venues: [{ name: 'Room', busy: [{ startAt: '2026-10-01T01:30:00.000Z', endAt: '2026-10-01T02:30:00.000Z' }] }] };
-    const id = repo.create(input, host);
-    expect(() => repo.finalize(id, 'slot-a', 1, host)).toThrow('重複');
-    expect(repo.get(id).state).toBe('open');
-  });
-  it('does not expose ownership or Cernere identifiers in the public response', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    const view = JSON.stringify(repo.view(id, stranger));
-    expect(view).not.toContain('owner_id'); expect(view).not.toContain('cernere-host');
-    expect(view).toContain('"canManage":false'); expect(view).toContain('"canEdit":false');
-  });
-  it('commits a notification with an answer and does not enqueue for rejected edits', () => {
-    const id = repo.create(draft, host);
-    repo.saveResponse(id, answer, null, null, 1, participant);
-    expect(db.prepare('SELECT * FROM meeting_outbox').all()).toHaveLength(1);
-    const row = repo.responses(id)[0]; if (!row) throw new Error('missing answer');
-    expect(() => repo.saveResponse(id, answer, row.id, 10, 1, participant)).toThrow();
-    expect(db.prepare('SELECT * FROM meeting_outbox').all()).toHaveLength(1);
-  });
+    it('preserves legacy records during online response migration, including repeated migrations', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        db.exec('ALTER TABLE meeting_response DROP COLUMN default_online; ALTER TABLE meeting_response DROP COLUMN online_json');
+        migrateMeetings(db);
+        migrateMeetings(db);
+        const saved = (await repo.responses(id))[0];
+        expect(saved?.default_online).toBe(0);
+        expect(saved?.online_json).toBe('{}');
+        expect(JSON.parse(saved?.answers_json || '{}')).toEqual(answer.answers);
+    });
+    it('stores per-date online overrides independently, validates them, and clears changed-slot overrides', async () => {
+        const twoSlots = { ...draft, slots: [...draft.slots, { ...draft.slots[0]!, id: 'slot-b' }] };
+        const id = (await repo.create(twoSlots, host));
+        const input = responseInput({ ...answer, answers: { 'slot-a': 'yes', 'slot-b': 'maybe' }, defaultOnline: true, online: { 'slot-a': false } }, twoSlots.slots);
+        (await repo.saveResponse(id, input, null, null, 1, participant));
+        const saved = (await repo.responses(id))[0];
+        expect(saved?.default_online).toBe(1);
+        expect(JSON.parse(saved?.online_json || '{}')).toEqual({ 'slot-a': false });
+        expect((await repo.view(id, participant))).toMatchObject({ responses: [{ defaultOnline: true, online: { 'slot-a': false } }] });
+        expect(() => responseInput({ ...input, online: { unknown: true } }, twoSlots.slots)).toThrow('ONLINE');
+        expect(() => responseInput({ ...input, online: { 'slot-a': 'true' } }, twoSlots.slots)).toThrow('ONLINE');
+        expect(() => responseInput({ ...input, defaultOnline: 'true' }, twoSlots.slots)).toThrow('ONLINE');
+        (await repo.update(id, { ...twoSlots, slots: twoSlots.slots.map(s => s.id === 'slot-a' ? { ...s, endAt: '2026-10-01T03:00:00.000Z' } : s) }, 1, host));
+        const changed = (await repo.responses(id))[0];
+        expect(JSON.parse(changed?.online_json || '{}')).toEqual({});
+        expect(JSON.parse(changed?.answers_json || '{}')).toEqual({ 'slot-b': 'maybe' });
+        expect(changed?.default_online).toBe(1);
+    });
+    it('rejects another browser changing or deleting an answer, even with the same name', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        const row = (await repo.responses(id))[0];
+        if (!row)
+            throw new Error('missing answer');
+        (await expect((async () => (await repo.saveResponse(id, answer, row.id, 1, 1, stranger)))()).rejects.toThrow('編集権限'));
+        (await expect((async () => (await repo.deleteResponse(id, row.id, 1, stranger)))()).rejects.toThrow('編集権限'));
+        (await expect((async () => (await repo.cancel(id, 1, participant)))()).rejects.toThrow('編集権限'));
+        expect((await repo.responses(id))).toHaveLength(1);
+    });
+    it('rejects stale edits and atomically invalidates answers to changed slots', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        const changed = { ...draft, slots: draft.slots.map(s => ({ ...s, endAt: '2026-10-01T03:00:00.000Z' })) };
+        (await repo.update(id, changed, 1, host));
+        expect(JSON.parse((await repo.responses(id))[0]?.answers_json || 'null')).toEqual({});
+        (await expect((async () => (await repo.update(id, draft, 1, host)))()).rejects.toThrow('別の端末'));
+        (await expect((async () => (await repo.saveResponse(id, answer, null, null, 1, stranger)))()).rejects.toThrow('別の端末'));
+    });
+    it('allows another authenticated device with the linked identity to edit', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        (await db.prepare('UPDATE meeting_identity SET user_id=? WHERE id=?').run('linked-user', 'participant'));
+        const otherDevice: Actor = { userId: 'linked-user', current: null, identities: [{ id: 'participant', user_id: 'linked-user', notify: 0 }] };
+        const row = (await repo.responses(id))[0];
+        if (!row)
+            throw new Error('missing answer');
+        (await repo.deleteResponse(id, row.id, 1, otherDevice));
+        expect((await repo.responses(id))).toHaveLength(0);
+    });
+    it('refuses a final venue collision and preserves meeting state', async () => {
+        const input = { ...draft, venues: [{ name: 'Room', busy: [{ startAt: '2026-10-01T01:30:00.000Z', endAt: '2026-10-01T02:30:00.000Z' }] }] };
+        const id = (await repo.create(input, host));
+        (await expect((async () => (await repo.finalize(id, 'slot-a', 1, host)))()).rejects.toThrow('重複'));
+        expect((await repo.get(id)).state).toBe('open');
+    });
+    it('does not expose ownership or Cernere identifiers in the public response', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        const view = JSON.stringify((await repo.view(id, stranger)));
+        expect(view).not.toContain('owner_id');
+        expect(view).not.toContain('cernere-host');
+        expect(view).toContain('"canManage":false');
+        expect(view).toContain('"canEdit":false');
+    });
+    it('commits a notification with an answer and does not enqueue for rejected edits', async () => {
+        const id = (await repo.create(draft, host));
+        (await repo.saveResponse(id, answer, null, null, 1, participant));
+        expect((await db.prepare('SELECT * FROM meeting_outbox').all())).toHaveLength(1);
+        const row = (await repo.responses(id))[0];
+        if (!row)
+            throw new Error('missing answer');
+        (await expect((async () => (await repo.saveResponse(id, answer, row.id, 10, 1, participant)))()).rejects.toThrow());
+        expect((await db.prepare('SELECT * FROM meeting_outbox').all())).toHaveLength(1);
+    });
 });
 describe('capability and input boundaries', () => {
-  it('requires the secret and expiry rather than a device ID alone', () => {
-    const id = '12345678-1234-1234-1234-123456789012', secret = 'a'.repeat(43), salt = 'salt';
-    const hash = createHash('sha256').update(`${salt}:${secret}`).digest('hex');
-    db.prepare('INSERT INTO meeting_device VALUES(?,?,?,?,?)').run(id, 'participant', salt, hash, Date.now() + 10000);
-    expect(deviceIdentity(db, `${id}.${secret}`)?.id).toBe('participant');
-    expect(deviceIdentity(db, `${id}.${'b'.repeat(43)}`)).toBeNull();
-    db.prepare('UPDATE meeting_device SET expires_at=0').run();
-    expect(deviceIdentity(db, `${id}.${secret}`)).toBeNull();
-  });
-  it('rejects timezone-less periods and missing candidate answers', () => {
-    expect(() => meetingInput({ ...draft, slots: [{ ...draft.slots[0], startAt: '2026-10-01T01:00' }] })).toThrow();
-    expect(() => responseInput({ ...answer, answers: {} }, draft.slots)).toThrow();
-    expect(() => responseInput({ ...answer, answers: { 'slot-a': 'yes', fake: 'no' } }, draft.slots)).toThrow();
-  });
+    it('requires the secret and expiry rather than a device ID alone', async () => {
+        const id = '12345678-1234-1234-1234-123456789012', secret = 'a'.repeat(43), salt = 'salt';
+        const hash = createHash('sha256').update(`${salt}:${secret}`).digest('hex');
+        (await db.prepare('INSERT INTO meeting_device VALUES(?,?,?,?,?)').run(id, 'participant', salt, hash, Date.now() + 10000));
+        expect((await deviceIdentity(db, `${id}.${secret}`))?.id).toBe('participant');
+        expect((await deviceIdentity(db, `${id}.${'b'.repeat(43)}`))).toBeNull();
+        (await db.prepare('UPDATE meeting_device SET expires_at=0').run());
+        expect((await deviceIdentity(db, `${id}.${secret}`))).toBeNull();
+    });
+    it('rejects timezone-less periods and missing candidate answers', () => {
+        expect(() => meetingInput({ ...draft, slots: [{ ...draft.slots[0], startAt: '2026-10-01T01:00' }] })).toThrow();
+        expect(() => responseInput({ ...answer, answers: {} }, draft.slots)).toThrow();
+        expect(() => responseInput({ ...answer, answers: { 'slot-a': 'yes', fake: 'no' } }, draft.slots)).toThrow();
+    });
 });

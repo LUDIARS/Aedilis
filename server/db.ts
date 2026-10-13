@@ -1,3 +1,4 @@
+import { prepare, type DatabaseInput } from './persistence/database.ts';
 // Aedilis 永続層 — better-sqlite3。
 //
 // 持つのは **予約台帳** と **施設キャッシュ** のみ。
@@ -7,94 +8,82 @@
 //
 // migration は CREATE IF NOT EXISTS のみ。 カラム追加時は ALTER ADD COLUMN を
 // 後付けし、 新カラム用 INDEX は ALTER の直後に冪等発行する (既存 DB の boot 失敗防止)。
-
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-
 export type ReservationState = 'pending' | 'confirmed' | 'cancelled';
-
 export interface FacilityCacheRow {
-  facility_id: string;
-  display_name: string;
-  source: string;
-  allow_overlap: number;
-  raw_json: string;
-  fetched_at: number;
+    facility_id: string;
+    display_name: string;
+    source: string;
+    allow_overlap: number;
+    raw_json: string;
+    fetched_at: number;
 }
-
 export interface ReservationRow {
-  id: string;
-  facility_id: string;
-  owner_user_id: string;
-  start_at: number;
-  end_at: number;
-  purpose: string;
-  state: ReservationState;
-  created_at: number;
-  updated_at: number;
+    id: string;
+    facility_id: string;
+    owner_user_id: string;
+    start_at: number;
+    end_at: number;
+    purpose: string;
+    state: ReservationState;
+    created_at: number;
+    updated_at: number;
 }
-
 export interface UserDisplayRow {
-  user_id: string;
-  name: string;
-  updated_at: number;
+    user_id: string;
+    name: string;
+    updated_at: number;
 }
-
 export interface GatewayRegistryRow {
-  lan_id: string;
-  public_key_pem: string;
-  facility_id: string;
-  label: string;
-  token_hash: string;
-  created_at: number;
+    lan_id: string;
+    public_key_pem: string;
+    facility_id: string;
+    label: string;
+    token_hash: string;
+    created_at: number;
 }
-
 export interface AttendanceRow {
-  id: string;
-  user_id: string;
-  facility_id: string;
-  lan_id: string;
-  checked_in_at: number;
-  reservation_id: string | null;
-  nonce: string;
-  method: CheckinMethod;
-  assurance: CheckinAssurance;
-  created_at: number;
+    id: string;
+    user_id: string;
+    facility_id: string;
+    lan_id: string;
+    checked_in_at: number;
+    reservation_id: string | null;
+    nonce: string;
+    method: CheckinMethod;
+    assurance: CheckinAssurance;
+    created_at: number;
 }
-
 export type CheckinMethod = 'face' | 'face_passive' | 'passkey' | 'staff_override' | 'session' | 'password' | 'gps';
 export type CheckinAssurance = 'high' | 'medium' | 'manual' | 'low';
-
 /**
  * GPS チェックインの写真の使い回し検知用 (CONTRACTS §6 G3)。 写真本体・Exif の
  * 位置は保存しない。 photo_sha256 と (user_id, exif_taken_at) がそれぞれ UNIQUE。
  */
 export interface GpsCheckinPhotoRow {
-  photo_sha256: string;
-  user_id: string;
-  exif_taken_at: number;
-  result: string;
-  distance_m: number;
-  attendance_id: string | null;
-  created_at: number;
+    photo_sha256: string;
+    user_id: string;
+    exif_taken_at: number;
+    result: string;
+    distance_m: number;
+    attendance_id: string | null;
+    created_at: number;
 }
-
 export interface CheckinEventSummaryRow {
-  id: string;
-  lan_id: string;
-  counts_json: string;
-  received_at: number;
+    id: string;
+    lan_id: string;
+    counts_json: string;
+    received_at: number;
 }
-
 export function openDb(dbPath: string): Database.Database {
-  mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  db.exec(`
+    mkdirSync(dirname(dbPath), { recursive: true });
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    db.exec(`
     CREATE TABLE IF NOT EXISTS facility_cache (
       facility_id   TEXT PRIMARY KEY,
       display_name  TEXT NOT NULL,
@@ -176,302 +165,191 @@ export function openDb(dbPath: string): Database.Database {
     CREATE UNIQUE INDEX IF NOT EXISTS gps_checkin_photo_user_taken
       ON gps_checkin_photo(user_id, exif_taken_at);
   `);
-  addColumnIfMissing(db, 'gateway_registry', 'token_hash', "TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing(db, 'attendance', 'method', "TEXT NOT NULL DEFAULT 'passkey'");
-  addColumnIfMissing(db, 'attendance', 'assurance', "TEXT NOT NULL DEFAULT 'medium'");
-  return db;
+    addColumnIfMissing(db, 'gateway_registry', 'token_hash', "TEXT NOT NULL DEFAULT ''");
+    addColumnIfMissing(db, 'attendance', 'method', "TEXT NOT NULL DEFAULT 'passkey'");
+    addColumnIfMissing(db, 'attendance', 'assurance', "TEXT NOT NULL DEFAULT 'medium'");
+    return db;
 }
-
-function addColumnIfMissing(
-  db: Database.Database,
-  table: 'gateway_registry' | 'attendance',
-  column: string,
-  definition: string,
-): void {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  if (!columns.some((entry) => entry.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
+function addColumnIfMissing(db: Database.Database, table: 'gateway_registry' | 'attendance', column: string, definition: string): void {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+        name: string;
+    }>;
+    if (!columns.some((entry) => entry.name === column)) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
 }
-
 // ── Facility cache ─────────────────────────────────────────────────────────
-
 /**
  * 施設をキャッシュへ upsert。 allow_overlap は **初回 insert 時のみ** source の値を
  * 使い、 既存行では更新しない (admin のトグル [[setFacilityOverlap]] が権威のため、
  * 起動同期で上書きしない)。
  */
-export function upsertFacilityCache(
-  db: Database.Database,
-  args: {
+export async function upsertFacilityCache(db: DatabaseInput, args: {
     facilityId: string;
     displayName: string;
     source: string;
     allowOverlap: boolean;
     rawJson: string;
-  },
-): void {
-  db.prepare(
-    `INSERT INTO facility_cache
+}): Promise<void> {
+    (await prepare(db, `INSERT INTO facility_cache
        (facility_id, display_name, source, allow_overlap, raw_json, fetched_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(facility_id) DO UPDATE SET
        display_name  = excluded.display_name,
        source        = excluded.source,
        raw_json      = excluded.raw_json,
-       fetched_at    = excluded.fetched_at`,
-  ).run(
-    args.facilityId,
-    args.displayName,
-    args.source,
-    args.allowOverlap ? 1 : 0,
-    args.rawJson,
-    Date.now(),
-  );
+       fetched_at    = excluded.fetched_at`).run(args.facilityId, args.displayName, args.source, args.allowOverlap ? 1 : 0, args.rawJson, Date.now()));
 }
-
-export function getFacilityCache(
-  db: Database.Database,
-  facilityId: string,
-): FacilityCacheRow | null {
-  return (
-    db
-      .prepare<[string], FacilityCacheRow>(
-        `SELECT * FROM facility_cache WHERE facility_id = ?`,
-      )
-      .get(facilityId) ?? null
-  );
+export async function getFacilityCache(db: DatabaseInput, facilityId: string): Promise<FacilityCacheRow | null> {
+    return ((await prepare<[
+        string
+    ], FacilityCacheRow>(db, `SELECT * FROM facility_cache WHERE facility_id = ?`).get(facilityId)) ?? null);
 }
-
-export function setFacilityOverlap(
-  db: Database.Database,
-  facilityId: string,
-  allowOverlap: boolean,
-): boolean {
-  const info = db
-    .prepare(`UPDATE facility_cache SET allow_overlap = ? WHERE facility_id = ?`)
-    .run(allowOverlap ? 1 : 0, facilityId);
-  return info.changes > 0;
+export async function setFacilityOverlap(db: DatabaseInput, facilityId: string, allowOverlap: boolean): Promise<boolean> {
+    const info = (await prepare(db, `UPDATE facility_cache SET allow_overlap = ? WHERE facility_id = ?`).run(allowOverlap ? 1 : 0, facilityId));
+    return info.changes > 0;
 }
-
 // ── Reservation operations ─────────────────────────────────────────────────
-
 /** [s1,e1) と [s2,e2) は s1 < e2 かつ s2 < e1 のとき重なる。 */
-export function findConflicts(
-  db: Database.Database,
-  facilityId: string,
-  startAt: number,
-  endAt: number,
-  excludeId?: string,
-): ReservationRow[] {
-  return db
-    .prepare<[string, number, number, string], ReservationRow>(
-      `SELECT * FROM reservation
+export async function findConflicts(db: DatabaseInput, facilityId: string, startAt: number, endAt: number, excludeId?: string): Promise<ReservationRow[]> {
+    return (await prepare<[
+        string,
+        number,
+        number,
+        string
+    ], ReservationRow>(db, `SELECT * FROM reservation
        WHERE facility_id = ?
          AND state != 'cancelled'
          AND start_at < ?
          AND end_at > ?
          AND id != ?
-       ORDER BY start_at`,
-    )
-    .all(facilityId, endAt, startAt, excludeId ?? '');
+       ORDER BY start_at`).all(facilityId, endAt, startAt, excludeId ?? ''));
 }
-
-export function createReservation(
-  db: Database.Database,
-  args: {
+export async function createReservation(db: DatabaseInput, args: {
     facilityId: string;
     ownerUserId: string;
     startAt: number;
     endAt: number;
     purpose: string;
     state: ReservationState;
-  },
-): ReservationRow {
-  const now = Date.now();
-  const id = randomUUID();
-  db.prepare(
-    `INSERT INTO reservation
+}): Promise<ReservationRow> {
+    const now = Date.now();
+    const id = randomUUID();
+    (await prepare(db, `INSERT INTO reservation
        (id, facility_id, owner_user_id, start_at, end_at, purpose, state,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    args.facilityId,
-    args.ownerUserId,
-    args.startAt,
-    args.endAt,
-    args.purpose,
-    args.state,
-    now,
-    now,
-  );
-  return getReservation(db, id) as ReservationRow;
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, args.facilityId, args.ownerUserId, args.startAt, args.endAt, args.purpose, args.state, now, now));
+    return (await getReservation(db, id)) as ReservationRow;
 }
-
-export function getReservation(
-  db: Database.Database,
-  id: string,
-): ReservationRow | null {
-  return (
-    db
-      .prepare<[string], ReservationRow>(`SELECT * FROM reservation WHERE id = ?`)
-      .get(id) ?? null
-  );
+export async function getReservation(db: DatabaseInput, id: string): Promise<ReservationRow | null> {
+    return ((await prepare<[
+        string
+    ], ReservationRow>(db, `SELECT * FROM reservation WHERE id = ?`).get(id)) ?? null);
 }
-
-export function listReservations(
-  db: Database.Database,
-  filter: { facilityId?: string; from?: number; to?: number },
-): ReservationRow[] {
-  const where: string[] = [`state != 'cancelled'`];
-  const params: Array<string | number> = [];
-  if (filter.facilityId) {
-    where.push('facility_id = ?');
-    params.push(filter.facilityId);
-  }
-  if (typeof filter.from === 'number') {
-    where.push('end_at > ?');
-    params.push(filter.from);
-  }
-  if (typeof filter.to === 'number') {
-    where.push('start_at < ?');
-    params.push(filter.to);
-  }
-  return db
-    .prepare<Array<string | number>, ReservationRow>(
-      `SELECT * FROM reservation WHERE ${where.join(' AND ')}
-       ORDER BY start_at LIMIT 500`,
-    )
-    .all(...params);
+export async function listReservations(db: DatabaseInput, filter: {
+    facilityId?: string;
+    from?: number;
+    to?: number;
+}): Promise<ReservationRow[]> {
+    const where: string[] = [`state != 'cancelled'`];
+    const params: Array<string | number> = [];
+    if (filter.facilityId) {
+        where.push('facility_id = ?');
+        params.push(filter.facilityId);
+    }
+    if (typeof filter.from === 'number') {
+        where.push('end_at > ?');
+        params.push(filter.from);
+    }
+    if (typeof filter.to === 'number') {
+        where.push('start_at < ?');
+        params.push(filter.to);
+    }
+    return (await prepare<Array<string | number>, ReservationRow>(db, `SELECT * FROM reservation WHERE ${where.join(' AND ')}
+       ORDER BY start_at LIMIT 500`).all(...params));
 }
-
-export function listReservationsForUser(
-  db: Database.Database,
-  userId: string,
-): ReservationRow[] {
-  return db
-    .prepare<[string], ReservationRow>(
-      `SELECT * FROM reservation
+export async function listReservationsForUser(db: DatabaseInput, userId: string): Promise<ReservationRow[]> {
+    return (await prepare<[
+        string
+    ], ReservationRow>(db, `SELECT * FROM reservation
        WHERE owner_user_id = ? AND state != 'cancelled'
-       ORDER BY start_at DESC LIMIT 200`,
-    )
-    .all(userId);
+       ORDER BY start_at DESC LIMIT 200`).all(userId));
 }
-
-export function updateReservation(
-  db: Database.Database,
-  id: string,
-  patch: { startAt?: number; endAt?: number; purpose?: string },
-): ReservationRow | null {
-  const current = getReservation(db, id);
-  if (!current || current.state === 'cancelled') return null;
-  const startAt = patch.startAt ?? current.start_at;
-  const endAt = patch.endAt ?? current.end_at;
-  const purpose = patch.purpose ?? current.purpose;
-  db.prepare(
-    `UPDATE reservation
+export async function updateReservation(db: DatabaseInput, id: string, patch: {
+    startAt?: number;
+    endAt?: number;
+    purpose?: string;
+}): Promise<ReservationRow | null> {
+    const current = (await getReservation(db, id));
+    if (!current || current.state === 'cancelled')
+        return null;
+    const startAt = patch.startAt ?? current.start_at;
+    const endAt = patch.endAt ?? current.end_at;
+    const purpose = patch.purpose ?? current.purpose;
+    (await prepare(db, `UPDATE reservation
        SET start_at = ?, end_at = ?, purpose = ?, updated_at = ?
-       WHERE id = ?`,
-  ).run(startAt, endAt, purpose, Date.now(), id);
-  return getReservation(db, id);
+       WHERE id = ?`).run(startAt, endAt, purpose, Date.now(), id));
+    return (await getReservation(db, id));
 }
-
-export function cancelReservation(
-  db: Database.Database,
-  id: string,
-): ReservationRow | null {
-  const current = getReservation(db, id);
-  if (!current || current.state === 'cancelled') return null;
-  db.prepare(
-    `UPDATE reservation SET state = 'cancelled', updated_at = ? WHERE id = ?`,
-  ).run(Date.now(), id);
-  return getReservation(db, id);
+export async function cancelReservation(db: DatabaseInput, id: string): Promise<ReservationRow | null> {
+    const current = (await getReservation(db, id));
+    if (!current || current.state === 'cancelled')
+        return null;
+    (await prepare(db, `UPDATE reservation SET state = 'cancelled', updated_at = ? WHERE id = ?`).run(Date.now(), id));
+    return (await getReservation(db, id));
 }
-
 // ── User display name cache ────────────────────────────────────────────────
-
-export function upsertUserDisplay(
-  db: Database.Database,
-  userId: string,
-  name: string,
-): void {
-  db.prepare(
-    `INSERT INTO user_display_cache(user_id, name, updated_at)
+export async function upsertUserDisplay(db: DatabaseInput, userId: string, name: string): Promise<void> {
+    (await prepare(db, `INSERT INTO user_display_cache(user_id, name, updated_at)
      VALUES (?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        name = excluded.name,
-       updated_at = excluded.updated_at`,
-  ).run(userId, name, Date.now());
+       updated_at = excluded.updated_at`).run(userId, name, Date.now()));
 }
-
-export function getUserDisplay(
-  db: Database.Database,
-  userId: string,
-): string | null {
-  const row = db
-    .prepare<[string], UserDisplayRow>(
-      `SELECT * FROM user_display_cache WHERE user_id = ?`,
-    )
-    .get(userId);
-  return row?.name ?? null;
+export async function getUserDisplay(db: DatabaseInput, userId: string): Promise<string | null> {
+    const row = (await prepare<[
+        string
+    ], UserDisplayRow>(db, `SELECT * FROM user_display_cache WHERE user_id = ?`).get(userId));
+    return row?.name ?? null;
 }
-
 // ── Gateway registry (出席ゲートウェイ公開鍵) ────────────────────────────────
-
 /** 会場ゲートウェイの公開鍵を upsert (lan_id が PK)。 created_at は初回のみ。 */
-export function upsertGateway(
-  db: Database.Database,
-  args: { lanId: string; publicKeyPem: string; facilityId: string; label?: string; tokenHash: string },
-): GatewayRegistryRow {
-  db.prepare(
-    `INSERT INTO gateway_registry (lan_id, public_key_pem, facility_id, label, token_hash, created_at)
+export async function upsertGateway(db: DatabaseInput, args: {
+    lanId: string;
+    publicKeyPem: string;
+    facilityId: string;
+    label?: string;
+    tokenHash: string;
+}): Promise<GatewayRegistryRow> {
+    (await prepare(db, `INSERT INTO gateway_registry (lan_id, public_key_pem, facility_id, label, token_hash, created_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(lan_id) DO UPDATE SET
        public_key_pem = excluded.public_key_pem,
        facility_id    = excluded.facility_id,
        label          = excluded.label,
-       token_hash     = excluded.token_hash`,
-  ).run(args.lanId, args.publicKeyPem, args.facilityId, args.label ?? '', args.tokenHash, Date.now());
-  return getGateway(db, args.lanId) as GatewayRegistryRow;
+       token_hash     = excluded.token_hash`).run(args.lanId, args.publicKeyPem, args.facilityId, args.label ?? '', args.tokenHash, Date.now()));
+    return (await getGateway(db, args.lanId)) as GatewayRegistryRow;
 }
-
-export function getGatewayByTokenHash(db: Database.Database, tokenHash: string): GatewayRegistryRow | null {
-  return db
-    .prepare<[string], GatewayRegistryRow>('SELECT * FROM gateway_registry WHERE token_hash = ?')
-    .get(tokenHash) ?? null;
+export async function getGatewayByTokenHash(db: DatabaseInput, tokenHash: string): Promise<GatewayRegistryRow | null> {
+    return (await prepare<[
+        string
+    ], GatewayRegistryRow>(db, 'SELECT * FROM gateway_registry WHERE token_hash = ?').get(tokenHash)) ?? null;
 }
-
-export function getGateway(
-  db: Database.Database,
-  lanId: string,
-): GatewayRegistryRow | null {
-  return (
-    db
-      .prepare<[string], GatewayRegistryRow>(
-        `SELECT * FROM gateway_registry WHERE lan_id = ?`,
-      )
-      .get(lanId) ?? null
-  );
+export async function getGateway(db: DatabaseInput, lanId: string): Promise<GatewayRegistryRow | null> {
+    return ((await prepare<[
+        string
+    ], GatewayRegistryRow>(db, `SELECT * FROM gateway_registry WHERE lan_id = ?`).get(lanId)) ?? null);
 }
-
-export function listGateways(db: Database.Database): GatewayRegistryRow[] {
-  return db
-    .prepare<[], GatewayRegistryRow>(
-      `SELECT * FROM gateway_registry ORDER BY created_at`,
-    )
-    .all();
+export async function listGateways(db: DatabaseInput): Promise<GatewayRegistryRow[]> {
+    return (await prepare<[
+    ], GatewayRegistryRow>(db, `SELECT * FROM gateway_registry ORDER BY created_at`).all());
 }
-
 // ── Attendance (出席記録) ────────────────────────────────────────────────────
-
 /**
  * 出席を記録する。 nonce は UNIQUE — 既に同じ nonce が記録済なら 'duplicate'
  * を返す (replay 検出)。 race condition でも UNIQUE 制約で原子的に弾く。
  */
-export function insertAttendance(
-  db: Database.Database,
-  args: {
+export async function insertAttendance(db: DatabaseInput, args: {
     userId: string;
     facilityId: string;
     lanId: string;
@@ -480,186 +358,164 @@ export function insertAttendance(
     nonce: string;
     method?: CheckinMethod;
     assurance?: CheckinAssurance;
-  },
-): AttendanceRow | 'duplicate' {
-  const id = randomUUID();
-  try {
-    db.prepare(
-      `INSERT INTO attendance
+}): Promise<AttendanceRow | 'duplicate'> {
+    const id = randomUUID();
+    try {
+        (await prepare(db, `INSERT INTO attendance
          (id, user_id, facility_id, lan_id, checked_in_at, reservation_id, nonce, method, assurance, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      args.userId,
-      args.facilityId,
-      args.lanId,
-      args.checkedInAt,
-      args.reservationId,
-      args.nonce,
-      args.method ?? 'passkey',
-      args.assurance ?? 'medium',
-      Date.now(),
-    );
-  } catch (e) {
-    if (e instanceof Error && (e as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return 'duplicate';
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, args.userId, args.facilityId, args.lanId, args.checkedInAt, args.reservationId, args.nonce, args.method ?? 'passkey', args.assurance ?? 'medium', Date.now()));
     }
-    throw e;
-  }
-  return db
-    .prepare<[string], AttendanceRow>(`SELECT * FROM attendance WHERE id = ?`)
-    .get(id) as AttendanceRow;
+    catch (e) {
+        if (e instanceof Error && (e as {
+            code?: string;
+        }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            return 'duplicate';
+        }
+        throw e;
+    }
+    return (await prepare<[
+        string
+    ], AttendanceRow>(db, `SELECT * FROM attendance WHERE id = ?`).get(id)) as AttendanceRow;
 }
-
 /** 同じハッシュ、 または同じ利用者 × 同じ Exif 撮影時刻の写真が既出か。 */
-export function isGpsPhotoReused(
-  db: Database.Database,
-  args: { photoSha256: string; userId: string; exifTakenAt: number },
-): boolean {
-  const row = db
-    .prepare<[string, string, number], { found: number }>(
-      `SELECT 1 AS found FROM gps_checkin_photo
-       WHERE photo_sha256 = ? OR (user_id = ? AND exif_taken_at = ?) LIMIT 1`,
-    )
-    .get(args.photoSha256, args.userId, args.exifTakenAt);
-  return row !== undefined;
+export async function isGpsPhotoReused(db: DatabaseInput, args: {
+    photoSha256: string;
+    userId: string;
+    exifTakenAt: number;
+}): Promise<boolean> {
+    const row = (await prepare<[
+        string,
+        string,
+        number
+    ], {
+        found: number;
+    }>(db, `SELECT 1 AS found FROM gps_checkin_photo
+       WHERE photo_sha256 = ? OR (user_id = ? AND exif_taken_at = ?) LIMIT 1`).get(args.photoSha256, args.userId, args.exifTakenAt));
+    return row !== undefined;
 }
-
 /** 写真の判定記録を挿入する。 UNIQUE 違反 (競合した再利用) は 'duplicate'。 */
-export function insertGpsCheckinPhoto(
-  db: Database.Database,
-  args: {
+export async function insertGpsCheckinPhoto(db: DatabaseInput, args: {
     photoSha256: string;
     userId: string;
     exifTakenAt: number;
     result: string;
     distanceM: number;
     attendanceId: string | null;
-  },
-): 'inserted' | 'duplicate' {
-  try {
-    db.prepare(
-      `INSERT INTO gps_checkin_photo
+}): Promise<'inserted' | 'duplicate'> {
+    try {
+        (await prepare(db, `INSERT INTO gps_checkin_photo
          (photo_sha256, user_id, exif_taken_at, result, distance_m, attendance_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(args.photoSha256, args.userId, args.exifTakenAt, args.result, args.distanceM, args.attendanceId, Date.now());
-    return 'inserted';
-  } catch (e) {
-    if (e instanceof Error && (e as { code?: string }).code?.startsWith('SQLITE_CONSTRAINT')) return 'duplicate';
-    throw e;
-  }
-}
-
-export function insertCheckinEventSummary(
-  db: Database.Database,
-  args: { lanId: string; counts: Readonly<Record<string, number>>; receivedAt: number },
-): CheckinEventSummaryRow {
-  const id = randomUUID();
-  db.prepare(
-    `INSERT INTO checkin_event_summary (id, lan_id, counts_json, received_at) VALUES (?, ?, ?, ?)`,
-  ).run(id, args.lanId, JSON.stringify(args.counts), args.receivedAt);
-  return db.prepare<[string], CheckinEventSummaryRow>('SELECT * FROM checkin_event_summary WHERE id = ?').get(id) as CheckinEventSummaryRow;
-}
-
-export interface AttendancePolicySummary {
-  staffOverrideCount: number;
-  passkeyOnlyStreakUsers: Array<{ userId: string; days: number }>;
-}
-
-export function getAttendancePolicySummary(db: Database.Database, streakThreshold: number): AttendancePolicySummary {
-  const staffOverrideCount = (db.prepare("SELECT COUNT(*) AS count FROM attendance WHERE method = 'staff_override'").get() as { count: number }).count;
-  const rows = db.prepare<[], Pick<AttendanceRow, 'user_id' | 'checked_in_at' | 'method'>>(
-    'SELECT user_id, checked_in_at, method FROM attendance ORDER BY user_id, checked_in_at DESC',
-  ).all();
-  const methodsByUserDay = new Map<string, Map<string, Set<CheckinMethod>>>();
-  for (const row of rows) {
-    const date = new Date(row.checked_in_at).toISOString().slice(0, 10);
-    const byDay = methodsByUserDay.get(row.user_id) ?? new Map<string, Set<CheckinMethod>>();
-    const methods = byDay.get(date) ?? new Set<CheckinMethod>();
-    methods.add(row.method);
-    byDay.set(date, methods);
-    methodsByUserDay.set(row.user_id, byDay);
-  }
-  const passkeyOnlyStreakUsers: Array<{ userId: string; days: number }> = [];
-  for (const [userId, byDay] of methodsByUserDay) {
-    const passkeyDays = [...byDay.entries()]
-      .filter(([, methods]) => methods.size === 1 && methods.has('passkey'))
-      .map(([date]) => date)
-      .sort()
-      .reverse();
-    let longest = 0;
-    let current = 0;
-    let previous: number | undefined;
-    for (const date of passkeyDays) {
-      const day = Date.parse(`${date}T00:00:00.000Z`);
-      current = previous === undefined || previous - day === 86_400_000 ? current + 1 : 1;
-      longest = Math.max(longest, current);
-      previous = day;
+       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(args.photoSha256, args.userId, args.exifTakenAt, args.result, args.distanceM, args.attendanceId, Date.now()));
+        return 'inserted';
     }
-    if (longest >= streakThreshold) passkeyOnlyStreakUsers.push({ userId, days: longest });
-  }
-  return { staffOverrideCount, passkeyOnlyStreakUsers };
+    catch (e) {
+        if (e instanceof Error && (e as {
+            code?: string;
+        }).code?.startsWith('SQLITE_CONSTRAINT'))
+            return 'duplicate';
+        throw e;
+    }
 }
-
-export function listAttendanceForUser(
-  db: Database.Database,
-  userId: string,
-): AttendanceRow[] {
-  return db
-    .prepare<[string], AttendanceRow>(
-      `SELECT * FROM attendance WHERE user_id = ? ORDER BY checked_in_at DESC LIMIT 200`,
-    )
-    .all(userId);
+export async function insertCheckinEventSummary(db: DatabaseInput, args: {
+    lanId: string;
+    counts: Readonly<Record<string, number>>;
+    receivedAt: number;
+}): Promise<CheckinEventSummaryRow> {
+    const id = randomUUID();
+    (await prepare(db, `INSERT INTO checkin_event_summary (id, lan_id, counts_json, received_at) VALUES (?, ?, ?, ?)`).run(id, args.lanId, JSON.stringify(args.counts), args.receivedAt));
+    return (await prepare<[
+        string
+    ], CheckinEventSummaryRow>(db, 'SELECT * FROM checkin_event_summary WHERE id = ?').get(id)) as CheckinEventSummaryRow;
 }
-
-export function listAttendance(
-  db: Database.Database,
-  filter: { facilityId?: string; from?: number; to?: number },
-): AttendanceRow[] {
-  const where: string[] = ['1 = 1'];
-  const params: Array<string | number> = [];
-  if (filter.facilityId) {
-    where.push('facility_id = ?');
-    params.push(filter.facilityId);
-  }
-  if (typeof filter.from === 'number') {
-    where.push('checked_in_at >= ?');
-    params.push(filter.from);
-  }
-  if (typeof filter.to === 'number') {
-    where.push('checked_in_at < ?');
-    params.push(filter.to);
-  }
-  return db
-    .prepare<Array<string | number>, AttendanceRow>(
-      `SELECT * FROM attendance WHERE ${where.join(' AND ')}
-       ORDER BY checked_in_at DESC LIMIT 500`,
-    )
-    .all(...params);
+export interface AttendancePolicySummary {
+    staffOverrideCount: number;
+    passkeyOnlyStreakUsers: Array<{
+        userId: string;
+        days: number;
+    }>;
 }
-
+export async function getAttendancePolicySummary(db: DatabaseInput, streakThreshold: number): Promise<AttendancePolicySummary> {
+    const staffOverrideCount = ((await prepare(db, "SELECT COUNT(*) AS count FROM attendance WHERE method = 'staff_override'").get()) as {
+        count: number;
+    }).count;
+    const rows = (await prepare<[
+    ], Pick<AttendanceRow, 'user_id' | 'checked_in_at' | 'method'>>(db, 'SELECT user_id, checked_in_at, method FROM attendance ORDER BY user_id, checked_in_at DESC').all());
+    const methodsByUserDay = new Map<string, Map<string, Set<CheckinMethod>>>();
+    for (const row of rows) {
+        const date = new Date(row.checked_in_at).toISOString().slice(0, 10);
+        const byDay = methodsByUserDay.get(row.user_id) ?? new Map<string, Set<CheckinMethod>>();
+        const methods = byDay.get(date) ?? new Set<CheckinMethod>();
+        methods.add(row.method);
+        byDay.set(date, methods);
+        methodsByUserDay.set(row.user_id, byDay);
+    }
+    const passkeyOnlyStreakUsers: Array<{
+        userId: string;
+        days: number;
+    }> = [];
+    for (const [userId, byDay] of methodsByUserDay) {
+        const passkeyDays = [...byDay.entries()]
+            .filter(([, methods]) => methods.size === 1 && methods.has('passkey'))
+            .map(([date]) => date)
+            .sort()
+            .reverse();
+        let longest = 0;
+        let current = 0;
+        let previous: number | undefined;
+        for (const date of passkeyDays) {
+            const day = Date.parse(`${date}T00:00:00.000Z`);
+            current = previous === undefined || previous - day === 86400000 ? current + 1 : 1;
+            longest = Math.max(longest, current);
+            previous = day;
+        }
+        if (longest >= streakThreshold)
+            passkeyOnlyStreakUsers.push({ userId, days: longest });
+    }
+    return { staffOverrideCount, passkeyOnlyStreakUsers };
+}
+export async function listAttendanceForUser(db: DatabaseInput, userId: string): Promise<AttendanceRow[]> {
+    return (await prepare<[
+        string
+    ], AttendanceRow>(db, `SELECT * FROM attendance WHERE user_id = ? ORDER BY checked_in_at DESC LIMIT 200`).all(userId));
+}
+export async function listAttendance(db: DatabaseInput, filter: {
+    facilityId?: string;
+    from?: number;
+    to?: number;
+}): Promise<AttendanceRow[]> {
+    const where: string[] = ['1 = 1'];
+    const params: Array<string | number> = [];
+    if (filter.facilityId) {
+        where.push('facility_id = ?');
+        params.push(filter.facilityId);
+    }
+    if (typeof filter.from === 'number') {
+        where.push('checked_in_at >= ?');
+        params.push(filter.from);
+    }
+    if (typeof filter.to === 'number') {
+        where.push('checked_in_at < ?');
+        params.push(filter.to);
+    }
+    return (await prepare<Array<string | number>, AttendanceRow>(db, `SELECT * FROM attendance WHERE ${where.join(' AND ')}
+       ORDER BY checked_in_at DESC LIMIT 500`).all(...params));
+}
 /**
  * checkedInAt 時点で有効な confirmed 予約を 1 件探す (同 user × facility)。
  * [start_at, end_at) に checkedInAt が含まれるものが対象。 無ければ null (= walk-in)。
  */
-export function findMatchingReservation(
-  db: Database.Database,
-  userId: string,
-  facilityId: string,
-  checkedInAt: number,
-): ReservationRow | null {
-  return (
-    db
-      .prepare<[string, string, number, number], ReservationRow>(
-        `SELECT * FROM reservation
+export async function findMatchingReservation(db: DatabaseInput, userId: string, facilityId: string, checkedInAt: number): Promise<ReservationRow | null> {
+    return ((await prepare<[
+        string,
+        string,
+        number,
+        number
+    ], ReservationRow>(db, `SELECT * FROM reservation
          WHERE owner_user_id = ?
            AND facility_id = ?
            AND state = 'confirmed'
            AND start_at <= ?
            AND end_at > ?
          ORDER BY start_at DESC
-         LIMIT 1`,
-      )
-      .get(userId, facilityId, checkedInAt, checkedInAt) ?? null
-  );
+         LIMIT 1`).get(userId, facilityId, checkedInAt, checkedInAt)) ?? null);
 }

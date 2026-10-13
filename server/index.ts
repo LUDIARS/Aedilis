@@ -14,7 +14,8 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { join, resolve } from 'node:path';
 
-import { openDb } from './db.ts';
+import { openRuntimeDatabase } from './lib/database-bootstrap.ts';
+import { isPostgres, prepare } from './persistence/database.ts';
 import { startAuth } from './auth.ts';
 import { LocalFacilitySource } from './facility/local.ts';
 import { makeMeRouter } from './routes/me.ts';
@@ -78,7 +79,7 @@ const ADMIN_IDS = new Set(
     .filter(Boolean),
 );
 
-const db = openDb(DB_PATH);
+const db = await openRuntimeDatabase(DB_PATH, process.env);
 const meetings = meetingConfig(AUDIENCE, CERNERE_BASE_URL);
 migrateMeetings(db);
 migrateMeet(db);
@@ -98,8 +99,6 @@ const cernereProjectClient = createCernereProjectClient({
 });
 cernereProjectClient.start();
 const stopMeetingOutbox = startMeetingOutbox(db, cernereProjectClient, meetings);
-process.once('SIGTERM', stopMeetingOutbox);
-process.once('SIGINT', stopMeetingOutbox);
 
 const facilitySource = new LocalFacilitySource(FACILITIES_PATH);
 
@@ -117,14 +116,18 @@ app.use(
 const DEFAULT_GATEWAY_URL =
   process.env.AEDILIS_DEFAULT_GATEWAY_URL?.trim() || null;
 
-app.get('/api/health', (c) =>
-  c.json({
+app.get('/api/health', async (c) => {
+  const databaseBackend = isPostgres(db) ? 'postgres' : 'sqlite';
+  try { await prepare(db, 'SELECT 1 AS healthy').get(); }
+  catch { return c.json({ ok: false, service: 'aedilis', databaseBackend }, 503); }
+  return c.json({
     ok: true,
     service: 'aedilis',
     port: PORT,
+    databaseBackend,
     defaultGatewayUrl: DEFAULT_GATEWAY_URL,
-  }),
-);
+  });
+});
 
 // Corpus hub 連携 — サービスマニフェスト (認証不要)。 Corpus が読み、
 // declarative panel の descriptor を内蔵レンダラで描画する。
@@ -156,12 +159,27 @@ app.notFound((c) => {
   return c.redirect('/');
 });
 
-serve({ fetch: app.fetch, port: PORT }, (info) => {
+const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`[aedilis] listening on http://localhost:${info.port}`);
   console.log(`[aedilis] data dir: ${DATA_DIR}`);
+  console.log(`[aedilis] database backend: ${isPostgres(db) ? 'postgres' : 'sqlite'}`);
   console.log(`[aedilis] facilities: ${FACILITIES_PATH}`);
   console.log(`[aedilis] cernere: ${CERNERE_BASE_URL}`);
   console.log(`[aedilis] audience: ${AUDIENCE}`);
   console.log(`[aedilis] admin user ids: ${ADMIN_IDS.size}`);
   console.log(`[aedilis] cernere project client: starting (client_id=${CERNERE_CLIENT_ID})`);
+});
+
+let shuttingDown = false;
+async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  stopMeetingOutbox();
+  cernereProjectClient.close();
+  await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+  if (isPostgres(db)) await db.close();
+  else db.close();
+}
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => {
+  void shutdown().catch(() => { console.error('[aedilis] shutdown cleanup failed'); process.exitCode = 1; });
 });

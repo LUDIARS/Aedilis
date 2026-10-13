@@ -60,6 +60,7 @@ Googleカレンダー読み込みとDiscord通知の設定は
 
 - 単一 Hono アプリ (`server/`) が REST API + 静的 SPA を提供
 - 永続化は SQLite (`data/aedilis.db`、 better-sqlite3 / WAL)
+  - AWSは `AEDILIS_DB_BACKEND=postgres` とExから注入された `AEDILIS_DATABASE_URL` で移行済みPostgreSQLを選択できる。[AWS保存先・公開手順](spec/setup/aws-postgresql-runtime.md)。設定不備時にSQLiteへ戻ることはない。
   - 本社データの PostgreSQL 取り込み手順: [データ移行](spec/setup/postgresql-data-transfer.md)。取り込み先と稼働中アプリの保存先は別途確認する。
 - フロントエンドは esbuild + vanilla TypeScript
 - 施設マスタは `facilities.json` (`FacilitySource` 抽象で差替可能)
