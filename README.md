@@ -107,6 +107,8 @@ npm run build
 
 通常起動は生成済みのJavaScriptをNodeで実行し、tsx、watcher、起動ごとのビルドを使わない。Node 24.14.1でビルドを確認している。起動のcwdは本体checkout rootとし、既存の `data/` と `facilities.json` を引き続き使う。AWSへの移行手順と未解決条件は [aws-migration.md](spec/setup/aws-migration.md) を参照。
 
+初回導入ではsetupが固定されたログ用submoduleを初期化する。既存のcommit不一致・変更済みファイルを上書きしない。準備に失敗した段階は `.local/aedilis-setup.jsonl` で確認できる。このログには段階名・時刻・成否のみを保存する。
+
 開発時は開発依存を導入し直す。`npm run dev` は初回ビルド後に生成物を監視する。ソース編集の継続反映には別端末で `npm run watch:server` と `npm run watch:web` を実行する。常駐サービスの管理はExcubitorに任せる。
 
 AWS等の別拠点では、起動前にCernereの到達先とExのissuer資格情報を設定する。既存の公開URLの切替や本社データの移行は別途確認する。移行操作は未対応エラーで停止し、空の移行を成功扱いしない。セットアップのみの場合はEx bootstrapの `start:false` を使う。

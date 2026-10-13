@@ -6,6 +6,8 @@ service-runtimeは導入時の依存準備・サーバー/画面ビルドを所�
 
 catalogの `build_command` は `node scripts/site/setup.mjs`。通常のdeploy/reflectでも開発依存を再導入してビルドし、終了時に除去する。初回bootstrap後のprune済みcheckoutで `npm run build` だけを呼び、compiler不足で反映に失敗する経路を作らない。
 
+初回cloneはsubmodule非再帰であるため、setupが `lib/vestigium` のみを固定commitで初期化する。remote ref更新と再帰取得はしない。既存のcommit不一致・tracked差分は明示エラーで停止して保護する。診断は `.local/aedilis-setup.jsonl` へ段階名・UTC時刻・成否のみを書き、env値・子プロセス出力・秘密を記録しない。setup全体の成否とruntime成功は別判定とする。
+
 不変条件: setupはSQLite、秘密、設定を上書きしない。サービス起動とスキーマ初期化は通常runtime/Excubitorが所有する。data-export/importは未対応エラーで停止し、成功を偽装しない。
 
 通常起動は Excubitor の Vault-only env 注入を前提とする。`server/bootstrap.ts` は
