@@ -1,4 +1,4 @@
-import { prepare, transaction, type DatabaseInput } from '../persistence/database.ts';
+import { isPostgres, prepare, transaction, type DatabaseInput } from '../persistence/database.ts';
 import { randomUUID } from 'node:crypto';
 import { releaseMeetingFacility, reserveMeetingFacility } from './facility-reservation.ts';
 import { owns } from './identity.ts';
@@ -13,8 +13,11 @@ export class MeetingRepository {
             throw new MeetingError(404, '会議が見つかりません');
         return row;
     }
+    /** @implements SPEC-PG-MEETING-RESPONSE-ORDERING */
     async responses(id: string): Promise<ResponseRow[]> {
-        return (await prepare(this.db, 'SELECT * FROM meeting_response WHERE meeting_id = ? ORDER BY rowid').all(id)) as ResponseRow[];
+        // SQLite's implicit insertion key is unavailable in PostgreSQL. UUID is a stable PG tie-breaker.
+        const order = isPostgres(this.db) ? 'id' : 'rowid';
+        return (await prepare(this.db, `SELECT * FROM meeting_response WHERE meeting_id = ? ORDER BY ${order}`).all(id)) as ResponseRow[];
     }
     requireOwner(row: MeetingRow | ResponseRow, actor: Actor): void {
         if (!owns(actor, row.owner_id))
