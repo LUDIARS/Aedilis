@@ -15,7 +15,7 @@
 
 ## アーキ要点
 
-- Hono + better-sqlite3 + esbuild + tsx (Bibliotheca pattern と同じ)
+- Hono + better-sqlite3。導入時に tsc と esbuild でサーバー・画面をビルドし、実行時は Node のみ。
 - Cernere PASETO V4 検証は `server/auth.ts` (公開鍵 6h 毎 refresh)
 - 個人データは Cernere 単一情報源。 自前 DB には `owner_user_id` (Cernere sub) と
   display name の **キャッシュ** のみ
@@ -48,6 +48,6 @@
 - 自動: `npm test` (vitest, `test/`) — db.ts の予約 CRUD / 重複検知、
   `LocalFacilitySource`、 ルーターの認証ゲートを in-memory SQLite でカバー
   (Cernere / ネットワーク不要)
-- CI: `.github/workflows/test.yml` が push / PR で typecheck + build:web + test
+- CI: `.github/workflows/test.yml` が push / PR で typecheck + build + test
 - 手動: `npm run dev` → ブラウザで施設選択 → 予約 → 別アカでキャンセル
 - typecheck (`npm run typecheck`) は必ず通す。 test 配下も tsconfig に含む

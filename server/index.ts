@@ -12,8 +12,7 @@ import { meetingPages } from './meetings/pages.ts';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import { openDb } from './db.ts';
 import { startAuth } from './auth.ts';
@@ -32,7 +31,8 @@ import { meetConfig } from './meet/config.ts';
 import { migrateMeet } from './meet/schema.ts';
 import { managedMeetRoutes } from './meet/routes.ts';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Excubitor runs from the checkout root; compiled code lives under dist/server.
+const ROOT = resolve('.');
 
 /** 必須 env を取り出す。 未設定なら落とす (= localhost 等の暗黙 fallback は禁止)。 */
 function requireEnv(name: string): string {
@@ -51,13 +51,13 @@ const PORT = Number(process.env.AEDILIS_PORT ?? 17502);
 const DATA_DIR = resolve(
   process.env.AEDILIS_DATA && process.env.AEDILIS_DATA.trim()
     ? process.env.AEDILIS_DATA
-    : join(__dirname, '..', 'data'),
+    : join(ROOT, 'data'),
 );
 const DB_PATH = join(DATA_DIR, 'aedilis.db');
 const FACILITIES_PATH = resolve(
   process.env.AEDILIS_FACILITIES && process.env.AEDILIS_FACILITIES.trim()
     ? process.env.AEDILIS_FACILITIES
-    : join(__dirname, '..', 'facilities.json'),
+    : join(ROOT, 'facilities.json'),
 );
 
 // 認証系は必須 — 不正な値で起動して全リクエスト 401 になるより起動を止める

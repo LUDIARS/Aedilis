@@ -71,7 +71,9 @@ Excubitor から起動し、設定と Vault の秘密情報を子プロセスの
 
 ```bash
 npm install
-# サービス起動は Excubitor から行う (catalog: node --run dev:excubitor)
+# 導入時にサーバーと画面を生成する
+npm run build
+# サービス起動は Excubitor から行う (catalog: node dist/server/bootstrap.js)
 ```
 
 必須 env: `CERNERE_BASE_URL`、 `AEDILIS_PUBLIC_URL`、
@@ -101,7 +103,11 @@ npm install
 
 ## Excubitorによる新規導入
 
-`excubitor.bootstrap.json` は `scripts/site/setup.mjs` を実行する。Node/npmを前提にロック済み依存を `npm ci --include=dev` で導入し、`build:web` を実行する。非対話・再実行可能で、失敗は非0終了。既存SQLite・秘密・接続設定は変更せず、サービス起動やデータ移行を行わない。SQLiteのスキーマ準備は通常起動時が所有する。
+`excubitor.bootstrap.json` は `scripts/site/setup.mjs` を実行する。Node/npmを前提にログ用submoduleとアプリのロック済み依存を導入し、サーバーと画面をビルドした後、両方の開発依存を除去する。非対話・再実行可能で、失敗は非0終了。既存SQLite・秘密・接続設定は変更せず、サービス起動やデータ移行を行わない。SQLiteのスキーマ準備は通常起動時が所有する。
+
+通常起動は生成済みのJavaScriptをNodeで実行し、tsx、watcher、起動ごとのビルドを使わない。Node 24.14.1でビルドを確認している。起動のcwdは本体checkout rootとし、既存の `data/` と `facilities.json` を引き続き使う。AWSへの移行手順と未解決条件は [aws-migration.md](spec/setup/aws-migration.md) を参照。
+
+開発時は開発依存を導入し直す。`npm run dev` は初回ビルド後に生成物を監視する。ソース編集の継続反映には別端末で `npm run watch:server` と `npm run watch:web` を実行する。常駐サービスの管理はExcubitorに任せる。
 
 AWS等の別拠点では、起動前にCernereの到達先とExのissuer資格情報を設定する。既存の公開URLの切替や本社データの移行は別途確認する。移行操作は未対応エラーで停止し、空の移行を成功扱いしない。セットアップのみの場合はEx bootstrapの `start:false` を使う。
 

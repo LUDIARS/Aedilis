@@ -5,11 +5,13 @@
   "description": "LUDIARS Aedilis — facility reservation + schedule registration (Cernere SSO)",
   "type": "module",
   "scripts": {
-    "predev": "npm run build:web",
-    "dev:excubitor": "npm run dev",
-    "dev": "tsx watch server/bootstrap.ts",
-    "prestart": "npm run build:web",
-    "start": "tsx server/bootstrap.ts",
+    "predev": "npm run build",
+    "dev:excubitor": "npm run start",
+    "dev": "node --watch dist/server/bootstrap.js",
+    "start": "node dist/server/bootstrap.js",
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "tsc -p tsconfig.build.json",
+    "watch:server": "npm run build:server -- --watch",
     "build:web": "esbuild app=public/src/app.ts checkin=public/src/checkin.ts meetings=public/src/meetings/app.ts --bundle --outdir=public --target=es2020 --sourcemap --format=esm",
     "watch:web": "npm run build:web -- --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.frontend.json",
@@ -18,13 +20,12 @@
   "dependencies": {
     "@hono/node-server": "^2.0.4",
     "@ludiars/vestigium": "file:./lib/vestigium",
-    "@simplewebauthn/browser": "^13.3.0",
     "better-sqlite3": "13.0.3",
     "hono": "^4.12.23",
-    "paseto": "^3.1.4",
-    "tsx": "^4.21.0"
+    "paseto": "^3.1.4"
   },
   "devDependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
     "@types/better-sqlite3": "7.6.13",
     "@types/node": "^25.9.1",
     "esbuild": "^0.28.1",

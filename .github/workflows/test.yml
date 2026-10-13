@@ -32,8 +32,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build frontend bundle
-        run: npm run build:web
+      - name: Build production artifacts
+        run: npm run build
 
       - name: Run tests
         run: npm test
