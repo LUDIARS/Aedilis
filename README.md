@@ -60,6 +60,7 @@ Googleカレンダー読み込みとDiscord通知の設定は
 
 - 単一 Hono アプリ (`server/`) が REST API + 静的 SPA を提供
 - 永続化は SQLite (`data/aedilis.db`、 better-sqlite3 / WAL)
+  - 本社データの PostgreSQL 取り込み手順: [データ移行](spec/setup/postgresql-data-transfer.md)。取り込み先と稼働中アプリの保存先は別途確認する。
 - フロントエンドは esbuild + vanilla TypeScript
 - 施設マスタは `facilities.json` (`FacilitySource` 抽象で差替可能)
 

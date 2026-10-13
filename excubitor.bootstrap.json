@@ -3,7 +3,7 @@
   "service": "aedilis",
   "setup": "scripts/site/setup.mjs",
   "data": {
-    "export": "scripts/site/data-unavailable.mjs",
-    "import": "scripts/site/data-unavailable.mjs"
+    "export": "scripts/site/export-data.mjs",
+    "import": "scripts/site/import-data.mjs"
   }
 }
