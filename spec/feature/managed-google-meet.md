@@ -41,14 +41,44 @@ GLab (neco 2026-10-14「Ae と接続し、Meet のリンクを発行した予定
 v1 `x-glab-booking-context` assertion (HMAC over Cr user, method, path and body hash, 30 s); a valid assertion
 replaces the Ae same-origin check, an invalid one is refused (403) instead of falling back.
 
-- `POST /api/meet/oauth/start` with `redirectUri`: relayed requests only. The URI must exactly match
-  `AEDILIS_MEET_EXTERNAL_REDIRECT_URIS` (comma separated, HTTPS or loopback HTTP, no query/fragment) and must also
-  be an authorized redirect URI of the Google OAuth client. No Ae cookie is set; the state row is bound to the Cr user
-  and marked external (stored in `return_path` with the `external:` prefix, no schema change).
-- `POST /api/meet/oauth/complete` `{ state, code }`: relayed requests only, by the same Cr user who started it.
-  The Ae page callback never completes an external state and the external completion never completes an Ae state.
-  Organizer mode still requires `AEDILIS_ADMIN_IDS`, so the representative account is an Ae administrator who
-  signs in from GLab.
+- `POST /api/meet/oauth/start` with `redirectUri`: relayed requests only, and a relayed request must name one (it never
+  falls back to Ae's callback). The URI must exactly match the relaying front end's own list — GLab:
+  `AEDILIS_MEET_GLAB_REDIRECT_URIS` (earlier name `AEDILIS_MEET_EXTERNAL_REDIRECT_URIS`, read only when the new one is
+  unset; comma separated, HTTPS or loopback HTTP, no query/fragment) — and must also be an authorized redirect URI of
+  the Google OAuth client. No Ae cookie is set; the state row is bound to the Cr user and to the front end
+  (`return_path` = `external:<source>:<uri>`, no schema change).
+- `POST /api/meet/oauth/complete` `{ state, code }`: relayed requests only, by the same Cr user through the same front
+  end that started it. The Ae page callback never completes an external state and the external completion never
+  completes an Ae state.
+- Organizer mode without an organization still requires `AEDILIS_ADMIN_IDS` (Ae's representative).
+
+## SPEC-MANAGED-MEET-CALLBACK-PER-EMBEDDING
+
+neco 2026-10-15「GLAB に組み込んだ (GLAB 経由で呼び出された) Ae のコールバックは GLAB にしたいが、Ae 単品や別のサービスに
+組み込まれた場合はコールバックを分けたい」.
+
+- Ae's own page: Google returns to `AEDILIS_PUBLIC_URL` + `/api/meet/oauth/callback` (Ae cookie binding).
+- GLab (requests carrying a valid `x-glab-booking-context`): Google returns to GLab's callback from
+  `AEDILIS_MEET_GLAB_REDIRECT_URIS`. GLab cannot use another embedding's URIs and cannot complete their flows.
+- Another embedding gets its own relay source and its own redirect list (`MeetConfig.externalRedirectUris[source]`);
+  until it is added, only Ae's page and GLab can start a Google authorization.
+
+## SPEC-MANAGED-MEET-ORGANIZATION-REPRESENTATIVE
+
+neco 2026-10-15「Meet の代表アカウントは、GLAB の組織で予約した場合 GLAB の代表で登録したい。組織の代表者アカウントとしたい」.
+
+- GLab signs `representative: true` on an organization in the booking context when the caller is that Cr
+  organization's `owner`. Ae trusts the flag only inside a verified assertion and only on organizations.
+- `POST /api/meet/oauth/start` `{ mode: 'organizer', organizationId, redirectUri }` (relayed only): the caller must
+  represent that organization at start and again at completion. The organizer grant is saved to
+  `meet_group_organizer(group_kind='organization', group_id, user_id)`; Ae's own representative is not changed.
+- `GET /api/meet/status` adds `organizations: [{ id, name, organizerConnected, isOrganizer }]` for the organizations
+  the caller represents (never other members' Google accounts).
+- `POST /api/meet/:meetingId`: a meeting whose audience group is an organization is hosted by that organization's
+  representative when one has authorized, otherwise by Ae's representative. The host is fixed at the first attempt.
+- A representative (Ae's or an organization's) cannot run the creator link, which would replace its organizer token.
+
+Tests: `test/meet-glab-relay.test.ts`, `test/meet-oauth.test.ts`.
 - `POST /api/meet/:meetingId` relayed: the creator's own Google link is optional. When it is missing the
   representative account hosts alone (no COHOST member). Ae's own page keeps requiring the creator's link.
 

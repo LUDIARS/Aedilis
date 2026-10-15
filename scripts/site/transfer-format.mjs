@@ -4,7 +4,7 @@ export const TABLES = Object.freeze([
   'facility_cache', 'reservation', 'user_display_cache', 'gateway_registry',
   'attendance', 'checkin_event_summary', 'gps_checkin_photo', 'meeting_identity',
   'meeting_device', 'meeting_poll', 'meeting_response', 'meeting_outbox',
-  'meet_organizer', 'meet_oauth_state', 'meeting_meet', 'booking_audience',
+  'meet_organizer', 'meet_group_organizer', 'meet_oauth_state', 'meeting_meet', 'booking_audience',
   'meeting_facility_reservation', 'meeting_discord_respondent',
 ]);
 export const MAX_BYTES = 64 * 1024 * 1024;

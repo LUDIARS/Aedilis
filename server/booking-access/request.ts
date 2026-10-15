@@ -8,7 +8,8 @@ export async function bookingPrincipal(c: Context): Promise<BookingPrincipal> {
   const userId = identity?.userId ?? null;
   const url = new URL(c.req.url);
   const body = ['GET', 'HEAD'].includes(c.req.method) ? '' : await c.req.text();
-  const groups = verifyBookingContext(c.req.header('x-glab-booking-context'),
+  const assertion = c.req.header('x-glab-booking-context');
+  const groups = verifyBookingContext(assertion,
     process.env.GLAB_AEDILIS_CONTEXT_SECRET, userId, c.req.method, url.pathname + url.search, body);
-  return { userId, groups };
+  return { userId, groups, source: assertion ? 'glab' : null };
 }

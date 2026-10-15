@@ -6,6 +6,10 @@ import { managedMeetRoutes } from '../server/meet/routes.ts';
 import { migrateMeetings } from '../server/meetings/schema.ts';
 import { migrateMeet } from '../server/meet/schema.ts';
 import { parseExternalRedirectUris } from '../server/meet/config.ts';
+import { ensureBookingAccessSchema, saveAudience } from '../server/booking-access/policy.ts';
+import { MeetProvisioner } from '../server/meet/provision.ts';
+import type { MeetTokens } from '../server/meet/tokens.ts';
+import type { MeetApi } from '../server/meet/api.ts';
 import type { CernereProjectClient } from '../server/lib/cernere-project-client.ts';
 import type { AuthIdentity } from '../server/auth.ts';
 vi.mock('../server/auth.ts', () => {
@@ -23,14 +27,15 @@ vi.mock('../server/auth.ts', () => {
 const key = 'test-key-with-at-least-thirty-two-bytes';
 const redirectUri = 'https://glab.example/api/x/facility/meet/oauth/callback';
 /** Same v1 assertion GLab's facility proxy signs (plugins/facility/context-signature.ts). */
-function assertion(userId: string, method: string, path: string, body: string): string {
-    const payload = Buffer.from(JSON.stringify({ version: 1, source: 'glab', userId, groups: [], method, path,
+type Group = { kind: 'organization' | 'team'; id: string; name: string; representative?: true };
+function assertion(userId: string, method: string, path: string, body: string, groups: Group[] = []): string {
+    const payload = Buffer.from(JSON.stringify({ version: 1, source: 'glab', userId, groups, method, path,
         bodyHash: createHash('sha256').update(body).digest('hex'), expiresAt: Date.now() + 20000 })).toString('base64url');
     return `${payload}.${createHmac('sha256', key).update(payload).digest('base64url')}`;
 }
-function relayed(userId: string, method: string, path: string, body = '', admin = false): RequestInit {
+function relayed(userId: string, method: string, path: string, body = '', admin = false, groups: Group[] = []): RequestInit {
     return { method, headers: { 'content-type': 'application/json', 'x-test-user': userId, ...(admin ? { 'x-test-admin': '1' } : {}),
-        'x-glab-booking-context': assertion(userId, method, path, body) }, ...(method === 'GET' ? {} : { body }) };
+        'x-glab-booking-context': assertion(userId, method, path, body, groups) }, ...(method === 'GET' ? {} : { body }) };
 }
 let db: Database.Database;
 beforeEach(() => {
@@ -38,6 +43,7 @@ beforeEach(() => {
     db = new Database(':memory:');
     migrateMeetings(db);
     migrateMeet(db);
+    ensureBookingAccessSchema(db);
 });
 afterEach(() => {
     delete process.env.GLAB_AEDILIS_CONTEXT_SECRET;
@@ -45,7 +51,7 @@ afterEach(() => {
 });
 function app(request = vi.fn(async () => null)) {
     const client = { request } as unknown as CernereProjectClient;
-    return new Hono().route('/api/meet', managedMeetRoutes(db, client, { clientId: 'id', clientSecret: 'secret', publicUrl: 'https://ae.example', externalRedirectUris: [redirectUri] }));
+    return new Hono().route('/api/meet', managedMeetRoutes(db, client, { clientId: 'id', clientSecret: 'secret', publicUrl: 'https://ae.example', externalRedirectUris: { glab: [redirectUri] } }));
 }
 it('lets a GLab-signed request skip the Ae origin check but rejects a forged assertion', async () => {
     (await db.prepare("INSERT INTO meeting_identity(id,user_id,created_at) VALUES('owner','creator',1)").run());
@@ -94,4 +100,62 @@ it('keeps only exact HTTPS or loopback redirect URIs from the allowlist env', ()
     expect(parseExternalRedirectUris(` ${redirectUri}, http://127.0.0.1:5187/cb ,http://glab.example/cb,https://a.example/cb?x=1,nope, ${redirectUri}`))
         .toEqual([redirectUri, 'http://127.0.0.1:5187/cb']);
     expect(parseExternalRedirectUris(undefined)).toEqual([]);
+});
+const representative: Group = { kind: 'organization', id: 'org-1', name: 'GLab', representative: true };
+it('lets only the organization representative start an organization organizer authorization', async () => {
+    const meet = app();
+    const body = JSON.stringify({ mode: 'organizer', organizationId: 'org-1', redirectUri });
+    // The representative flag must be signed for that organization; a plain member or another organization is refused.
+    expect((await meet.request('/api/meet/oauth/start', relayed('member', 'POST', '/api/meet/oauth/start', body, false,
+        [{ kind: 'organization', id: 'org-1', name: 'GLab' }]))).status).toBe(403);
+    expect((await meet.request('/api/meet/oauth/start', relayed('owner', 'POST', '/api/meet/oauth/start', body, false,
+        [{ ...representative, id: 'org-2' }]))).status).toBe(403);
+    const started = await meet.request('/api/meet/oauth/start', relayed('owner', 'POST', '/api/meet/oauth/start', body, false, [representative]));
+    expect(started.status).toBe(200);
+    expect(new URL((await started.json() as { url: string }).url).searchParams.get('access_type')).toBe('offline');
+    // A non-admin cannot become Ae's own representative this way, and Ae's page cannot pick an organization.
+    expect((await meet.request('/api/meet/oauth/start', relayed('owner', 'POST', '/api/meet/oauth/start',
+        JSON.stringify({ mode: 'organizer', redirectUri }), false, [representative]))).status).toBe(403);
+    expect((await meet.request('/api/meet/oauth/start', { method: 'POST', headers: { origin: 'https://ae.example', 'content-type': 'application/json', 'x-test-user': 'owner' },
+        body: JSON.stringify({ mode: 'organizer', organizationId: 'org-1' }) })).status).toBe(400);
+    // A representative flag on a team is not a valid assertion.
+    expect((await meet.request('/api/meet/oauth/start', relayed('owner', 'POST', '/api/meet/oauth/start', body, false,
+        [{ kind: 'team', id: 'org-1', name: 'GLab', representative: true }]))).status).toBe(403);
+});
+it('reports only the organizations the caller represents', async () => {
+    (await db.prepare("INSERT INTO meet_group_organizer VALUES('organization','org-1','owner',1)").run());
+    const status = await app().request('/api/meet/status', relayed('owner', 'GET', '/api/meet/status', '', false,
+        [representative, { kind: 'organization', id: 'org-2', name: 'Other' }]));
+    expect((await status.json() as { organizations: unknown }).organizations)
+        .toEqual([{ id: 'org-1', name: 'GLab', organizerConnected: true, isOrganizer: true }]);
+});
+it('keeps each embedding on its own callback', async () => {
+    const meet = new Hono().route('/api/meet', managedMeetRoutes(db, { request: vi.fn() } as unknown as CernereProjectClient,
+        { clientId: 'id', clientSecret: 'secret', publicUrl: 'https://ae.example', externalRedirectUris: {} }));
+    // GLab may only use GLab's callbacks; with none configured even a relayed request is refused.
+    expect((await meet.request('/api/meet/oauth/start', relayed('member', 'POST', '/api/meet/oauth/start',
+        JSON.stringify({ mode: 'creator', redirectUri })))).status).toBe(403);
+    // A relayed request without its own callback must not fall back to Ae's callback.
+    expect((await meet.request('/api/meet/oauth/start', relayed('member', 'POST', '/api/meet/oauth/start',
+        JSON.stringify({ mode: 'creator' })))).status).toBe(403);
+});
+it("hosts an organization booking with the organization representative and others with Ae's representative", async () => {
+    (await db.prepare("INSERT INTO meet_organizer VALUES(1,'ae-admin')").run());
+    (await db.prepare("INSERT INTO meet_group_organizer VALUES('organization','org-1','owner',1)").run());
+    (await db.prepare("INSERT INTO meeting_identity(id,user_id,created_at) VALUES('owner','creator',1)").run());
+    for (const id of ['org-poll', 'team-poll', 'plain-poll'])
+        (await db.prepare("INSERT INTO meeting_poll(id,owner_id,title,description,organizer_name,slots_json,venues_json,created_at,updated_at,online_allowed) VALUES(?,'owner','Title','','Host','[]','[]',1,1,1)").run(id));
+    await saveAudience(db, 'meeting', 'org-poll', { visibility: 'internal', group: { kind: 'organization', id: 'org-1', name: 'GLab' } });
+    await saveAudience(db, 'meeting', 'team-poll', { visibility: 'internal', group: { kind: 'team', id: 'org-1', name: 'Team' } });
+    const tokens = { access: vi.fn(async (userId: string) => `token-${userId}`), email: vi.fn(async (userId: string) => `${userId}@example.com`) } as unknown as MeetTokens;
+    const api = { create: vi.fn(async () => ({ name: 'spaces/x', meetingUri: 'https://meet.google.com/x' })), configure: vi.fn(async () => undefined) } as unknown as MeetApi;
+    const provision = new MeetProvisioner(db, tokens, api);
+    await provision.ensure('org-poll', 'creator');
+    await provision.ensure('team-poll', 'creator');
+    await provision.ensure('plain-poll', 'creator');
+    expect((await db.prepare('SELECT meeting_id, organizer_id FROM meeting_meet ORDER BY meeting_id').all())).toEqual([
+        { meeting_id: 'org-poll', organizer_id: 'owner' },
+        { meeting_id: 'plain-poll', organizer_id: 'ae-admin' },
+        { meeting_id: 'team-poll', organizer_id: 'ae-admin' },
+    ]);
 });

@@ -54,6 +54,34 @@ it('does not allow non-admin users to authorize the managed organizer', async ()
         db.close();
     }
 });
+it('binds an organization representative only through the same front end while still representing it', async () => {
+    const db = new Database(':memory:');
+    migrateMeetings(db);
+    migrateMeet(db);
+    const redirect = 'https://glab.example/api/x/facility/meet/oauth/callback';
+    const config = { clientId: 'client', clientSecret: 'client-secret', publicUrl: 'https://ae.example', externalRedirectUris: { glab: [redirect] } };
+    const send = vi.fn<typeof fetch>();
+    const oauth = new MeetOAuth(db, config, new MeetTokens({ request: vi.fn(async () => null) }, config), send);
+    const identity: AuthIdentity = { userId: 'owner', role: 'general', displayName: null, projectKey: 'aedilis', isAdmin: false };
+    const caller = { source: 'glab' as const, groups: [{ kind: 'organization' as const, id: 'org-1', name: 'GLab', representative: true as const }] };
+    const start = async () => new URL(await oauth.beginExternal(identity, { mode: 'organizer', organizationId: 'org-1' }, redirect, caller)).searchParams.get('state');
+    try {
+        // Lost representation between start and completion stops the flow before any token exchange.
+        await expect(oauth.completeExternal(identity, await start(), 'code', { source: 'glab', groups: [] })).rejects.toThrow('Google認可が失効しました');
+        expect(send).not.toHaveBeenCalled();
+        send.mockResolvedValueOnce(Response.json({ access_token: 'a', refresh_token: 'r', expires_in: 3600, scope: ORGANIZER_SCOPES.join(' ') }))
+            .mockResolvedValueOnce(Response.json({ sub: 'google-sub', email: 'rep@glab.example', email_verified: true, hd: 'glab.example' }));
+        expect(await oauth.completeExternal(identity, await start(), 'code', caller)).toEqual({ mode: 'organizer', organizationId: 'org-1' });
+        expect((await db.prepare('SELECT group_kind, group_id, user_id FROM meet_group_organizer').all()))
+            .toEqual([{ group_kind: 'organization', group_id: 'org-1', user_id: 'owner' }]);
+        expect((await db.prepare('SELECT * FROM meet_organizer').all())).toHaveLength(0);
+        // The representative cannot downgrade its organizer token through a creator link.
+        await expect(oauth.beginExternal(identity, { mode: 'creator' }, redirect, caller)).rejects.toThrow('代表用');
+    }
+    finally {
+        db.close();
+    }
+});
 it('rejects a callback replayed under a different Cr user', async () => {
     const { db, app, identity, send } = fixture();
     try {

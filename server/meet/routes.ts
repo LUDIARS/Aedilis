@@ -1,4 +1,4 @@
-import { prepare, type DatabaseInput } from '../persistence/database.ts';
+import type { DatabaseInput } from '../persistence/database.ts';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { requireAuth, getIdentity } from '../auth.ts';
@@ -13,21 +13,34 @@ import { MeetTokens } from './tokens.ts';
 import { MeetOAuth } from './oauth.ts';
 import { MeetApi } from './api.ts';
 import { MeetProvisioner } from './provision.ts';
+import { organizationOrganizer, singletonOrganizer } from './organizers.ts';
+import type { MeetAuthorizationTarget, RelayCaller } from './oauth.ts';
 /**
  * A GLab-signed booking context binds the authenticated Cr user to the exact method, path and body, so a relayed
  * request cannot be forged cross-site. Invalid assertions throw (403) instead of falling back to the origin check.
  */
-async function relayedByGlab(c: Context): Promise<boolean> {
-    if (!c.req.header('x-glab-booking-context')) return false;
+async function relayedByGlab(c: Context): Promise<RelayCaller | null> {
+    if (!c.req.header('x-glab-booking-context')) return null;
     try {
-        return !!(await bookingPrincipal(c)).userId;
+        const principal = await bookingPrincipal(c);
+        return principal.userId && principal.source ? { source: principal.source, groups: principal.groups } : null;
     }
     catch {
         throw new MeetingError(403, 'GLabからの依頼を確認できません');
     }
 }
-export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClient, config: MeetConfig): Hono<{ Variables: { glabRelay: boolean } }> {
-    const app = new Hono<{ Variables: { glabRelay: boolean } }>(), tokens = new MeetTokens(client, config), oauth = new MeetOAuth(db, config, tokens);
+function authorizationTarget(input: Record<string, unknown>, relay: RelayCaller | null): MeetAuthorizationTarget {
+    if (input.mode !== 'creator' && input.mode !== 'organizer')
+        throw new MeetingError(400, '認可の種類を選んでください');
+    if (input.organizationId === undefined)
+        return { mode: input.mode };
+    // Organization representatives come only from a front end that signs organization memberships.
+    if (!relay || input.mode !== 'organizer' || typeof input.organizationId !== 'string' || !input.organizationId || input.organizationId.length > 200)
+        throw new MeetingError(400, '組織の指定が不正です');
+    return { mode: 'organizer', organizationId: input.organizationId };
+}
+export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClient, config: MeetConfig): Hono<{ Variables: { glabRelay: RelayCaller | null } }> {
+    const app = new Hono<{ Variables: { glabRelay: RelayCaller | null } }>(), tokens = new MeetTokens(client, config), oauth = new MeetOAuth(db, config, tokens);
     const repo = new MeetingRepository(db), provision = new MeetProvisioner(db, tokens, new MeetApi());
     app.use('*', bodyLimit({ maxSize: 8192 }));
     app.use('*', async (c, next) => {
@@ -48,28 +61,34 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
     app.onError((error, c) => c.json({ error: error instanceof MeetingError ? error.message : 'Meet連携に失敗しました。再読込してください' }, error instanceof MeetingError ? error.status : 503));
     app.get('/status', async (c) => {
         const identity = getIdentity(c), token = await tokens.get(identity.userId);
-        const organizer = (await prepare(db, 'SELECT user_id FROM meet_organizer WHERE singleton=1').get()) as {
-            user_id: string;
-        } | undefined;
-        return c.json({ configured: !!config.clientId && !!config.clientSecret, isAdmin: identity.isAdmin, organizerConnected: !!organizer, isOrganizer: organizer?.user_id === identity.userId, googleConnected: !!token?.metadata?.emailVerified, email: token?.metadata?.email || null });
+        const organizer = await singletonOrganizer(db);
+        // Only organizations the caller represents: their own connection state, never other members' accounts.
+        const organizations = await Promise.all((c.get('glabRelay')?.groups ?? [])
+            .filter(group => group.kind === 'organization' && group.representative === true)
+            .map(async (group) => {
+                const representative = await organizationOrganizer(db, group.id);
+                return { id: group.id, name: group.name, organizerConnected: !!representative, isOrganizer: representative === identity.userId };
+            }));
+        return c.json({ configured: !!config.clientId && !!config.clientSecret, isAdmin: identity.isAdmin, organizerConnected: !!organizer, isOrganizer: organizer === identity.userId, organizations, googleConnected: !!token?.metadata?.emailVerified, email: token?.metadata?.email || null });
     });
     app.post('/oauth/start', async (c) => {
-        const input = object(await c.req.json());
-        if (input.mode !== 'creator' && input.mode !== 'organizer')
-            throw new MeetingError(400, '認可の種類を選んでください');
-        if (input.redirectUri !== undefined) {
-            // Only a relayed front end may receive the Google redirect on its own origin.
-            if (!c.get('glabRelay') || typeof input.redirectUri !== 'string')
+        const input = object(await c.req.json()), relay = c.get('glabRelay');
+        const target = authorizationTarget(input, relay);
+        if (input.redirectUri !== undefined || relay) {
+            // A relayed front end receives the Google redirect on its own callback; Ae's own page on Ae's.
+            if (!relay || typeof input.redirectUri !== 'string')
                 throw new MeetingError(403, 'この戻り先からのGoogle認可は許可されていません');
-            return c.json({ url: await oauth.beginExternal(getIdentity(c), input.mode, input.redirectUri) });
+            return c.json({ url: await oauth.beginExternal(getIdentity(c), target, input.redirectUri, relay) });
         }
-        return c.json({ url: (await oauth.begin(c, getIdentity(c), input.mode, typeof input.returnPath === 'string' ? input.returnPath : '')) });
+        return c.json({ url: (await oauth.begin(c, getIdentity(c), target.mode, typeof input.returnPath === 'string' ? input.returnPath : '')) });
     });
     app.post('/oauth/complete', async (c) => {
-        if (!c.get('glabRelay'))
+        const relay = c.get('glabRelay');
+        if (!relay)
             throw new MeetingError(403, 'GLabからの依頼を確認できません');
         const input = object(await c.req.json());
-        return c.json(await oauth.completeExternal(getIdentity(c), input.state, input.code));
+        const target = await oauth.completeExternal(getIdentity(c), input.state, input.code, relay);
+        return c.json({ mode: target.mode, ...(target.organizationId ? { organizationId: target.organizationId } : {}) });
     });
     app.get('/oauth/callback', async (c) => {
         return c.redirect(await oauth.complete(c, getIdentity(c)));

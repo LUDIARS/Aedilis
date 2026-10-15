@@ -25,9 +25,10 @@ services:
     env:
       AEDILIS_PUBLIC_URL: https://ae.ai-run-do.com
       AEDILIS_CERNERE_PUBLIC_URL: https://cr.ai-run-do.com
-      # GLab が Meet の代表アカウント/作成者の Google 認可を自分の画面で受け取る戻り先 (完全一致、カンマ区切り)。
+      # GLab 経由で呼ばれた Meet の Google 認可の戻り先 (GLab 専用、完全一致、カンマ区切り)。Ae 単体の画面は
+      # AEDILIS_PUBLIC_URL の /api/meet/oauth/callback に戻り、別サービスに組み込むときはそのサービス専用の変数を足す。
       # GLab hub catalog の CORPUS_PUBLIC_URL + /api/x/facility/meet/oauth/callback (GLab のログイン cookie で受ける)。Google OAuth client の承認済みリダイレクト URI にも同じ値を登録する。
-      AEDILIS_MEET_EXTERNAL_REDIRECT_URIS: http://localhost:5187/api/x/facility/meet/oauth/callback
+      AEDILIS_MEET_GLAB_REDIRECT_URIS: http://localhost:5187/api/x/facility/meet/oauth/callback
       # Scoped respondent capabilities are issued only by the configured HQ guild.
       # CONCORDIA_URL is injected from Concordia's service-owned provides entry.
       AEDILIS_DISCORD_HANDOFF_ENABLED: "true"

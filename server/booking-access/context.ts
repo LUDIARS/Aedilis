@@ -1,7 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-export interface BookingGroup { kind: 'organization' | 'team'; id: string; name: string }
-export interface BookingPrincipal { userId: string | null; groups: BookingGroup[] }
+/**
+ * `representative` is GLab's claim that the caller is the organization's representative (Cr organization `owner`).
+ * It is only sent for organizations and only trusted inside a verified assertion.
+ */
+export interface BookingGroup { kind: 'organization' | 'team'; id: string; name: string; representative?: true }
+/** `source` names the trusted front end that signed the request (null for Ae's own page). */
+export interface BookingPrincipal { userId: string | null; groups: BookingGroup[]; source?: 'glab' | null }
 
 /** v1 GLab assertion: bound to the independently authenticated caller and exact request bytes. */
 export function verifyBookingContext(
@@ -29,8 +34,9 @@ export function verifyBookingContext(
   for (const item of value.groups) {
     if (!item || !['organization', 'team'].includes(item.kind)
       || typeof item.id !== 'string' || !item.id || item.id.length > 200
-      || typeof item.name !== 'string' || !item.name || item.name.length > 300) throw new Error('Invalid booking context');
-    groups.push({ kind: item.kind, id: item.id, name: item.name });
+      || typeof item.name !== 'string' || !item.name || item.name.length > 300
+      || (item.representative !== undefined && (item.representative !== true || item.kind !== 'organization'))) throw new Error('Invalid booking context');
+    groups.push({ kind: item.kind, id: item.id, name: item.name, ...(item.representative === true ? { representative: true as const } : {}) });
   }
   return groups;
 }

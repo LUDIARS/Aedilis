@@ -2,6 +2,8 @@ import { prepare, type DatabaseInput } from '../persistence/database.ts';
 import { MeetingError } from '../meetings/types.ts';
 import { MeetTokens } from './tokens.ts';
 import { MeetApi } from './api.ts';
+import { organizerForMeeting } from './organizers.ts';
+import { ensureBookingAccessSchema } from '../booking-access/policy.ts';
 export interface MeetRow {
     meeting_id: string;
     organizer_id: string;
@@ -12,7 +14,8 @@ export interface MeetRow {
 }
 export class MeetProvisioner {
     private readonly active = new Set<string>();
-    constructor(private readonly db: DatabaseInput, private readonly tokens: MeetTokens, private readonly api: MeetApi) { }
+    // The host choice reads the booking audience (organization bookings), so its table must exist like in MeetingRepository.
+    constructor(private readonly db: DatabaseInput, private readonly tokens: MeetTokens, private readonly api: MeetApi) { ensureBookingAccessSchema(db); }
     async get(id: string): Promise<{
         status: string;
         url?: string;
@@ -40,11 +43,11 @@ export class MeetProvisioner {
                 return (await this.get(id));
             if (row && !row.space_name)
                 throw new MeetingError(409, 'Meet作成結果が不明です。重複作成を防ぐため管理者の確認が必要です');
-            const organizer = row ? { user_id: row.organizer_id } : (await prepare(this.db, 'SELECT user_id FROM meet_organizer WHERE singleton=1').get()) as {
-                user_id: string;
-            } | undefined;
-            if (!organizer)
-                throw new MeetingError(409, '管理者によるGoogle認可が必要です');
+            // The host is fixed at the first attempt; later retries keep it even if the representative changes.
+            const organizerId = row ? row.organizer_id : await organizerForMeeting(this.db, id);
+            if (!organizerId)
+                throw new MeetingError(409, '組織の代表者または管理者によるGoogle認可が必要です');
+            const organizer = { user_id: organizerId };
             const email = options.creatorGoogle === 'optional'
                 ? await this.tokens.email(creatorId).catch((error: unknown) => {
                     if (error instanceof MeetingError && error.status === 409) return null;

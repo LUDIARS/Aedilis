@@ -75,7 +75,7 @@ describe('Ae SQLite to PostgreSQL transfer', () => {
     expect(sql.startsWith('BEGIN;')).toBe(true);
     expect(sql.indexOf('target_not_empty')).toBeLessThan(sql.indexOf('CREATE TABLE'));
     expect(sql.indexOf("current_database() <> 'aedilis'")).toBeLessThan(sql.indexOf('CREATE TABLE'));
-    expect(sql.match(/EXCEPT ALL/g)).toHaveLength(36);
+    expect(sql.match(/EXCEPT ALL/g)).toHaveLength(TABLES.length * 2);
     expect(sql.indexOf('SET CONSTRAINTS ALL IMMEDIATE')).toBeLessThan(sql.indexOf('INSERT INTO public.aedilis_transfer_receipt'));
     expect(sql.indexOf('INSERT INTO public.aedilis_transfer_receipt')).toBeLessThan(sql.indexOf('COMMIT;'));
     expect(sql.indexOf('COMMIT;')).toBeLessThan(sql.indexOf('SELECT json_build_object'));

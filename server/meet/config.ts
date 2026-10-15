@@ -1,7 +1,15 @@
+/** Trusted front ends that embed Ae and relay its API with a signed context. */
+export type RelaySource = 'glab';
+
 export interface MeetConfig {
   clientId: string; clientSecret: string; publicUrl: string;
-  /** Google redirect URIs owned by trusted front ends (GLab). Each must also be registered on the Google OAuth client. */
-  externalRedirectUris?: readonly string[];
+  /**
+   * Google redirect URIs per embedding front end. Ae's own page always returns to Ae's callback; a front end may
+   * only use its own URIs, so GLab's callback can never receive a flow started from another embedding (neco
+   * 2026-10-15「GLAB 経由で呼び出された Ae のコールバックは GLAB に、Ae 単品や別のサービスに組み込まれた場合は
+   * 分けたい」). Each URI must also be registered on the Google OAuth client.
+   */
+  externalRedirectUris?: Partial<Record<RelaySource, readonly string[]>>;
 }
 export const ORGANIZER_SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/meetings.space.created', 'https://www.googleapis.com/auth/meetings.space.settings'];
 
@@ -24,6 +32,9 @@ export function meetConfig(publicUrl: string): MeetConfig {
     publicUrl,
     clientId: process.env.AEDILIS_GOOGLE_CLIENT_ID?.trim() || '',
     clientSecret: process.env.AEDILIS_GOOGLE_CLIENT_SECRET?.trim() || '',
-    externalRedirectUris: parseExternalRedirectUris(process.env.AEDILIS_MEET_EXTERNAL_REDIRECT_URIS),
+    // AEDILIS_MEET_EXTERNAL_REDIRECT_URIS is the earlier name of GLab's list; read only when the new one is unset.
+    externalRedirectUris: {
+      glab: parseExternalRedirectUris(process.env.AEDILIS_MEET_GLAB_REDIRECT_URIS ?? process.env.AEDILIS_MEET_EXTERNAL_REDIRECT_URIS),
+    },
   };
 }
