@@ -1,8 +1,9 @@
 import { prepare, type DatabaseInput } from '../persistence/database.ts';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { requireAuth, getIdentity } from '../auth.ts';
 import type { CernereProjectClient } from '../lib/cernere-project-client.ts';
+import { bookingPrincipal } from '../booking-access/request.ts';
 import { actorFor } from '../meetings/identity.ts';
 import { MeetingRepository } from '../meetings/repository.ts';
 import { MeetingError } from '../meetings/types.ts';
@@ -12,14 +13,29 @@ import { MeetTokens } from './tokens.ts';
 import { MeetOAuth } from './oauth.ts';
 import { MeetApi } from './api.ts';
 import { MeetProvisioner } from './provision.ts';
-export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClient, config: MeetConfig): Hono {
-    const app = new Hono(), tokens = new MeetTokens(client, config), oauth = new MeetOAuth(db, config, tokens);
+/**
+ * A GLab-signed booking context binds the authenticated Cr user to the exact method, path and body, so a relayed
+ * request cannot be forged cross-site. Invalid assertions throw (403) instead of falling back to the origin check.
+ */
+async function relayedByGlab(c: Context): Promise<boolean> {
+    if (!c.req.header('x-glab-booking-context')) return false;
+    try {
+        return !!(await bookingPrincipal(c)).userId;
+    }
+    catch {
+        throw new MeetingError(403, 'GLabからの依頼を確認できません');
+    }
+}
+export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClient, config: MeetConfig): Hono<{ Variables: { glabRelay: boolean } }> {
+    const app = new Hono<{ Variables: { glabRelay: boolean } }>(), tokens = new MeetTokens(client, config), oauth = new MeetOAuth(db, config, tokens);
     const repo = new MeetingRepository(db), provision = new MeetProvisioner(db, tokens, new MeetApi());
     app.use('*', bodyLimit({ maxSize: 8192 }));
     app.use('*', async (c, next) => {
         c.header('Cache-Control', 'no-store');
         c.header('Referrer-Policy', 'no-referrer');
-        if (c.req.method !== 'GET' && (c.req.header('origin') !== new URL(config.publicUrl).origin || !c.req.header('content-type')?.startsWith('application/json')))
+        const relayed = await relayedByGlab(c);
+        c.set('glabRelay', relayed);
+        if (c.req.method !== 'GET' && ((!relayed && c.req.header('origin') !== new URL(config.publicUrl).origin) || !c.req.header('content-type')?.startsWith('application/json')))
             throw new MeetingError(403, '同じサイトから操作してください');
         await next();
     });
@@ -41,7 +57,19 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
         const input = object(await c.req.json());
         if (input.mode !== 'creator' && input.mode !== 'organizer')
             throw new MeetingError(400, '認可の種類を選んでください');
+        if (input.redirectUri !== undefined) {
+            // Only a relayed front end may receive the Google redirect on its own origin.
+            if (!c.get('glabRelay') || typeof input.redirectUri !== 'string')
+                throw new MeetingError(403, 'この戻り先からのGoogle認可は許可されていません');
+            return c.json({ url: await oauth.beginExternal(getIdentity(c), input.mode, input.redirectUri) });
+        }
         return c.json({ url: (await oauth.begin(c, getIdentity(c), input.mode, typeof input.returnPath === 'string' ? input.returnPath : '')) });
+    });
+    app.post('/oauth/complete', async (c) => {
+        if (!c.get('glabRelay'))
+            throw new MeetingError(403, 'GLabからの依頼を確認できません');
+        const input = object(await c.req.json());
+        return c.json(await oauth.completeExternal(getIdentity(c), input.state, input.code));
     });
     app.get('/oauth/callback', async (c) => {
         return c.redirect(await oauth.complete(c, getIdentity(c)));
@@ -59,7 +87,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
         repo.requireOwner(row, actor);
         if (!row.online_allowed || row.state === 'cancelled')
             throw new MeetingError(409, 'オンライン参加を有効にした会議で作成できます');
-        return c.json(await provision.ensure(row.id, identity.userId));
+        return c.json(await provision.ensure(row.id, identity.userId, { creatorGoogle: c.get('glabRelay') ? 'optional' : 'required' }));
     });
     return app;
 }

@@ -88,3 +88,19 @@ it('serializes simultaneous requests for one meeting', async () => {
         db.close();
     }
 });
+it('lets the representative account host alone when a GLab-relayed creator has no linked Google account', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(created()).mockResolvedValueOnce(Response.json({}));
+    const { db, provision, tokens } = (await fixture(send));
+    try {
+        const get = tokens.get.bind(tokens);
+        vi.spyOn(tokens, 'get').mockImplementation(async (userId: string) => userId === 'creator' ? null : get(userId));
+        await expect(provision.ensure('poll', 'creator')).rejects.toThrow('Google');
+        (await db.prepare('DELETE FROM meeting_meet').run());
+        expect(await provision.ensure('poll', 'creator', { creatorGoogle: 'optional' })).toEqual({ status: 'ready', url: 'https://meet.google.com/abc-defg-hij' });
+        // Create + settings only: no member listing / COHOST call for the unlinked creator.
+        expect(send).toHaveBeenCalledTimes(2);
+    }
+    finally {
+        db.close();
+    }
+});

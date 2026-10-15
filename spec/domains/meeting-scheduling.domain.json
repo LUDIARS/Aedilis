@@ -8,6 +8,9 @@
     { "pathPattern": "(^|/)public/src/meetings/[^/]+$" },
     { "pathPattern": "(^|/)public/meetings\\.(html|css)$" },
     { "pathPattern": "(^|/)test/meetings\\.test\\.ts$" },
-    { "pathPattern": "(^|/)test/meeting-participation\\.test\\.ts$" }
+    { "pathPattern": "(^|/)test/meeting-participation\\.test\\.ts$" },
+    { "pathPattern": "(^|/)server/meet/[^/]+$" },
+    { "pathPattern": "(^|/)test/(?:managed-meet|meet-[a-z0-9-]+)\\.test\\.ts$" },
+    { "pathPattern": "(^|/)spec/feature/managed-google-meet\\.md$" }
   ]
 }

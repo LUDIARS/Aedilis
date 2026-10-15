@@ -8,11 +8,29 @@ import { ORGANIZER_SCOPES, type MeetConfig } from './config.ts';
 import { googleJson } from './google-http.ts';
 import { MeetTokens, type TokenReply } from './tokens.ts';
 const COOKIE = 'aedilis_meet_oauth';
+/**
+ * A front end such as GLab receives the Google redirect on its own origin and relays code+state with the same
+ * authenticated Cr user. Its redirect URI is kept in `return_path` with this prefix (no schema change), so the
+ * Ae callback can never complete an external flow and the external completion can never complete an Ae flow.
+ */
+const EXTERNAL_PREFIX = 'external:';
+type Mode = 'creator' | 'organizer';
+interface StateRow { mode: string; verifier: string; return_path: string }
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+const validState = (value: string): boolean => /^[A-Za-z0-9_-]{43}$/.test(value);
 export class MeetOAuth {
     constructor(private readonly db: DatabaseInput, private readonly config: MeetConfig, private readonly tokens: MeetTokens, private readonly send: typeof fetch = fetch) { }
     private callback(): string { return new URL('/api/meet/oauth/callback', this.config.publicUrl).href; }
-    async begin(c: Context, identity: AuthIdentity, mode: 'creator' | 'organizer', returnPath: string): Promise<string> {
+    private allowedExternal(redirectUri: string): string {
+        let normalized: string;
+        try { normalized = new URL(redirectUri).href; }
+        catch { throw new MeetingError(400, '戻り先が不正です'); }
+        if (!(this.config.externalRedirectUris ?? []).includes(normalized))
+            throw new MeetingError(403, 'この戻り先からのGoogle認可は許可されていません');
+        return normalized;
+    }
+    /** Shared by the Ae page flow and a trusted front end flow: checks, one-use state row and the Google URL. */
+    private async authorizationUrl(identity: AuthIdentity, mode: Mode, storedPath: string, redirectUri: string): Promise<{ url: string; state: string }> {
         if (!this.config.clientId || !this.config.clientSecret)
             throw new MeetingError(503, '管理者によるGoogle API設定が必要です');
         if (mode === 'organizer' && !identity.isAdmin)
@@ -24,34 +42,63 @@ export class MeetOAuth {
             throw new MeetingError(409, '管理アカウントは管理用のGoogle再認可を利用してください');
         const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
         (await prepare(this.db, 'DELETE FROM meet_oauth_state WHERE expires_at<? OR user_id=?').run(Date.now(), identity.userId));
-        const destination = /^\/meeting\/[0-9a-f-]{36}$/i.test(returnPath) ? returnPath : '/meetings';
-        (await prepare(this.db, 'INSERT INTO meet_oauth_state VALUES(?,?,?,?,?,?)').run(hash(state), identity.userId, mode, verifier, Date.now() + 600000, destination));
-        setCookie(c, COOKIE, state, { path: '/api/meet/oauth', httpOnly: true, secure: this.config.publicUrl.startsWith('https:'), sameSite: 'Lax', maxAge: 600 });
+        (await prepare(this.db, 'INSERT INTO meet_oauth_state VALUES(?,?,?,?,?,?)').run(hash(state), identity.userId, mode, verifier, Date.now() + 600000, storedPath));
         const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        url.search = new URLSearchParams({ client_id: this.config.clientId, redirect_uri: this.callback(), response_type: 'code', state, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url'), scope: (mode === 'organizer' ? ORGANIZER_SCOPES : ['openid', 'email']).join(' '), access_type: mode === 'organizer' ? 'offline' : 'online', prompt: mode === 'organizer' ? 'consent select_account' : 'select_account' }).toString();
-        return url.href;
+        url.search = new URLSearchParams({ client_id: this.config.clientId, redirect_uri: redirectUri, response_type: 'code', state, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url'), scope: (mode === 'organizer' ? ORGANIZER_SCOPES : ['openid', 'email']).join(' '), access_type: mode === 'organizer' ? 'offline' : 'online', prompt: mode === 'organizer' ? 'consent select_account' : 'select_account' }).toString();
+        return { url: url.href, state };
+    }
+    async begin(c: Context, identity: AuthIdentity, mode: Mode, returnPath: string): Promise<string> {
+        const destination = /^\/meeting\/[0-9a-f-]{36}$/i.test(returnPath) ? returnPath : '/meetings';
+        const { url, state } = await this.authorizationUrl(identity, mode, destination, this.callback());
+        setCookie(c, COOKIE, state, { path: '/api/meet/oauth', httpOnly: true, secure: this.config.publicUrl.startsWith('https:'), sameSite: 'Lax', maxAge: 600 });
+        return url;
+    }
+    /**
+     * Front end flow. No Ae cookie exists in the browser, so the binding is: state row ↔ the Cr user who started it,
+     * and completion only through `completeExternal` by that same authenticated user. A victim who authorizes an
+     * attacker's URL cannot complete it (state belongs to the attacker) and the attacker never sees the code.
+     */
+    async beginExternal(identity: AuthIdentity, mode: Mode, redirectUri: string): Promise<string> {
+        const allowed = this.allowedExternal(redirectUri);
+        return (await this.authorizationUrl(identity, mode, EXTERNAL_PREFIX + allowed, allowed)).url;
     }
     async complete(c: Context, identity: AuthIdentity): Promise<string> {
         const state = c.req.query('state') || '', cookie = getCookie(c, COOKIE) || '';
-        if (!/^[A-Za-z0-9_-]{43}$/.test(state) || !/^[A-Za-z0-9_-]{43}$/.test(cookie) || !timingSafeEqual(Buffer.from(state), Buffer.from(cookie)))
+        if (!validState(state) || !validState(cookie) || !timingSafeEqual(Buffer.from(state), Buffer.from(cookie)))
             throw new MeetingError(403, 'Google認可をやり直してください');
-        const row = (await prepare(this.db, 'DELETE FROM meet_oauth_state WHERE state_hash=? AND user_id=? AND expires_at>? RETURNING *').get(hash(state), identity.userId, Date.now())) as {
-            mode: string;
-            verifier: string;
-            return_path: string;
-        } | undefined;
+        const row = await this.takeState(state, identity);
         deleteCookie(c, COOKIE, { path: '/api/meet/oauth', secure: this.config.publicUrl.startsWith('https:'), httpOnly: true, sameSite: 'Lax' });
-        if (!row || (row.mode === 'organizer' && !identity.isAdmin))
+        if (!row || row.return_path.startsWith(EXTERNAL_PREFIX))
+            throw new MeetingError(403, 'Google認可が失効しました');
+        if (c.req.query('error'))
+            throw new MeetingError(400, 'Google認可がキャンセルされました');
+        await this.bind(row, identity, c.req.query('code'), this.callback());
+        return row.return_path;
+    }
+    async completeExternal(identity: AuthIdentity, state: unknown, code: unknown): Promise<{ mode: Mode }> {
+        if (typeof state !== 'string' || !validState(state))
+            throw new MeetingError(403, 'Google認可をやり直してください');
+        const row = await this.takeState(state, identity);
+        if (!row || !row.return_path.startsWith(EXTERNAL_PREFIX))
+            throw new MeetingError(403, 'Google認可が失効しました');
+        const redirectUri = this.allowedExternal(row.return_path.slice(EXTERNAL_PREFIX.length));
+        await this.bind(row, identity, typeof code === 'string' ? code : undefined, redirectUri);
+        return { mode: row.mode === 'organizer' ? 'organizer' : 'creator' };
+    }
+    private async takeState(state: string, identity: AuthIdentity): Promise<StateRow | undefined> {
+        return (await prepare(this.db, 'DELETE FROM meet_oauth_state WHERE state_hash=? AND user_id=? AND expires_at>? RETURNING *').get(hash(state), identity.userId, Date.now())) as StateRow | undefined;
+    }
+    private async bind(row: StateRow, identity: AuthIdentity, code: string | undefined, redirectUri: string): Promise<void> {
+        if (row.mode === 'organizer' && !identity.isAdmin)
             throw new MeetingError(403, 'Google認可が失効しました');
         const organizer = (await prepare(this.db, 'SELECT user_id FROM meet_organizer WHERE singleton=1').get()) as {
             user_id: string;
         } | undefined;
         if (row.mode === 'creator' && organizer?.user_id === identity.userId)
             throw new MeetingError(409, '管理用のGoogle再認可を利用してください');
-        const code = c.req.query('code');
-        if (!code || code.length > 4096 || c.req.query('error'))
+        if (!code || code.length > 4096)
             throw new MeetingError(400, 'Google認可がキャンセルされました');
-        const reply = await googleJson<TokenReply>('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: row.verifier, client_id: this.config.clientId, client_secret: this.config.clientSecret, redirect_uri: this.callback() }) }, this.send);
+        const reply = await googleJson<TokenReply>('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: row.verifier, client_id: this.config.clientId, client_secret: this.config.clientSecret, redirect_uri: redirectUri }) }, this.send);
         if (!reply.access_token || !Number.isFinite(reply.expires_in) || reply.expires_in <= 0)
             throw new MeetingError(503, 'Googleの認可応答が不正です');
         // This binds a Google account to an already authenticated Cr user, never logs into Cr.
@@ -76,6 +123,5 @@ export class MeetOAuth {
         await this.tokens.store(identity.userId, { accessToken: reply.access_token, refreshToken, expiresAt: new Date(Date.now() + reply.expires_in * 1000).toISOString(), tokenType: 'Bearer', scope: reply.scope || 'openid email', metadata: { subject: user.sub, email: user.email, emailVerified: true, meetOrganizer: row.mode === 'organizer' } });
         if (row.mode === 'organizer')
             (await prepare(this.db, 'INSERT INTO meet_organizer VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET user_id=excluded.user_id').run(identity.userId));
-        return row.return_path;
     }
 }

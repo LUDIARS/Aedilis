@@ -34,6 +34,26 @@ eligible host/cohost joins; setting ON does not itself capture an empty meeting.
 - Uncertain creation requires administrator investigation in Google. There is deliberately
   no blind reset/create button. Cancelling a poll does not delete a Google space.
 
+## SPEC-MANAGED-MEET-GLAB-RELAY
+
+GLab (neco 2026-10-14「Ae と接続し、Meet のリンクを発行した予定を登録できるようにする。Meet の代表者になる
+アカウントは GLab でログインする」) relays the same API through its facility proxy. A relayed request carries the
+v1 `x-glab-booking-context` assertion (HMAC over Cr user, method, path and body hash, 30 s); a valid assertion
+replaces the Ae same-origin check, an invalid one is refused (403) instead of falling back.
+
+- `POST /api/meet/oauth/start` with `redirectUri`: relayed requests only. The URI must exactly match
+  `AEDILIS_MEET_EXTERNAL_REDIRECT_URIS` (comma separated, HTTPS or loopback HTTP, no query/fragment) and must also
+  be an authorized redirect URI of the Google OAuth client. No Ae cookie is set; the state row is bound to the Cr user
+  and marked external (stored in `return_path` with the `external:` prefix, no schema change).
+- `POST /api/meet/oauth/complete` `{ state, code }`: relayed requests only, by the same Cr user who started it.
+  The Ae page callback never completes an external state and the external completion never completes an Ae state.
+  Organizer mode still requires `AEDILIS_ADMIN_IDS`, so the representative account is an Ae administrator who
+  signs in from GLab.
+- `POST /api/meet/:meetingId` relayed: the creator's own Google link is optional. When it is missing the
+  representative account hosts alone (no COHOST member). Ae's own page keeps requiring the creator's link.
+
+Tests: `test/meet-glab-relay.test.ts` and the optional-creator case in `test/managed-meet.test.ts`.
+
 ## Setup
 
 1. Enable Google Meet API in the Google Cloud project and configure its consent screen.

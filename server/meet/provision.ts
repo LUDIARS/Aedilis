@@ -21,7 +21,11 @@ export class MeetProvisioner {
         return row?.status === 'ready' && row.meeting_uri ? { status: 'ready', url: row.meeting_uri } : { status: row?.status || 'none' };
     }
     private async row(id: string): Promise<MeetRow | undefined> { return (await prepare(this.db, 'SELECT * FROM meeting_meet WHERE meeting_id=?').get(id)) as MeetRow | undefined; }
-    async ensure(id: string, creatorId: string): Promise<{
+    /**
+     * `creatorGoogle: 'optional'` is used for requests relayed by a trusted front end (GLab): the representative
+     * Google account hosts the space alone when the creator has not linked Google. Ae's own page keeps 'required'.
+     */
+    async ensure(id: string, creatorId: string, options: { creatorGoogle?: 'required' | 'optional' } = {}): Promise<{
         status: string;
         url?: string;
     }> {
@@ -41,7 +45,12 @@ export class MeetProvisioner {
             } | undefined;
             if (!organizer)
                 throw new MeetingError(409, '管理者によるGoogle認可が必要です');
-            const email = await this.tokens.email(creatorId);
+            const email = options.creatorGoogle === 'optional'
+                ? await this.tokens.email(creatorId).catch((error: unknown) => {
+                    if (error instanceof MeetingError && error.status === 409) return null;
+                    throw error;
+                })
+                : await this.tokens.email(creatorId);
             const token = await this.tokens.access(organizer.user_id);
             const organizerEmail = await this.tokens.email(organizer.user_id);
             if (!row) {
@@ -60,7 +69,7 @@ export class MeetProvisioner {
             if (!row?.space_name)
                 throw new MeetingError(503, 'Meetの保存結果を確認できません');
             // Repeating configuration lists members first, recovering a lost create-member response.
-            await this.api.configure(token, row.space_name, organizerEmail.toLowerCase() === email.toLowerCase() ? null : email);
+            await this.api.configure(token, row.space_name, !email || organizerEmail.toLowerCase() === email.toLowerCase() ? null : email);
             (await prepare(this.db, "UPDATE meeting_meet SET status='ready',updated_at=? WHERE meeting_id=?").run(Date.now(), id));
             return (await this.get(id));
         }
