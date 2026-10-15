@@ -14,6 +14,8 @@ import { MeetOAuth } from './oauth.ts';
 import { MeetApi } from './api.ts';
 import { MeetProvisioner } from './provision.ts';
 import { organizationOrganizer, singletonOrganizer } from './organizers.ts';
+import { externalSpace } from './space-store.ts';
+const EXTERNAL_ID = /^[A-Za-z0-9_-]{1,100}$/;
 import type { MeetAuthorizationTarget, RelayCaller } from './oauth.ts';
 /**
  * A GLab-signed booking context binds the authenticated Cr user to the exact method, path and body, so a relayed
@@ -92,6 +94,36 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
     });
     app.get('/oauth/callback', async (c) => {
         return c.redirect(await oauth.complete(c, getIdentity(c)));
+    });
+    // Events owned by a trusted front end (GLab events). The front end decides who may see or issue them; Ae only
+    // accepts its signed relay and keys the space by `<source>:<event id>` (SPEC-MANAGED-MEET-EXTERNAL-EVENT).
+    const external = (c: Context): { relay: RelayCaller; store: ReturnType<typeof externalSpace> } => {
+        const relay = c.get('glabRelay');
+        if (!relay)
+            throw new MeetingError(403, 'GLabからの依頼を確認できません');
+        const kind = c.req.param('kind') ?? '', id = c.req.param('id') ?? '';
+        if (kind !== 'glab-event' || !EXTERNAL_ID.test(id))
+            throw new MeetingError(404, '予定が見つかりません');
+        return { relay, store: externalSpace(db, `${relay.source}-event`, id) };
+    };
+    app.get('/external/:kind/:id', async (c) => {
+        const { store } = external(c);
+        return c.json(provision.view(await store.row()));
+    });
+    app.post('/external/:kind/:id', async (c) => {
+        const { relay, store } = external(c);
+        const input = object(await c.req.json());
+        let organizationId: string | null = null;
+        if (input.organizationId !== undefined) {
+            // A member may host an event for an organization it belongs to; the host is that organization's representative.
+            if (typeof input.organizationId !== 'string' || !relay.groups.some(group => group.kind === 'organization' && group.id === input.organizationId))
+                throw new MeetingError(403, '所属する組織を選んでください');
+            organizationId = input.organizationId;
+        }
+        return c.json(await provision.ensureSpace(store, getIdentity(c).userId, {
+            creatorGoogle: 'optional',
+            organizer: async () => (organizationId ? await organizationOrganizer(db, organizationId) : null) ?? singletonOrganizer(db),
+        }));
     });
     app.get('/:id', async (c) => {
         (await repo.requireReadable(c.req.param('id'), await actorFor(db, c)));

@@ -51,6 +51,10 @@ replaces the Ae same-origin check, an invalid one is refused (403) instead of fa
   end that started it. The Ae page callback never completes an external state and the external completion never
   completes an Ae state.
 - Organizer mode without an organization still requires `AEDILIS_ADMIN_IDS` (Ae's representative).
+- `POST /api/meet/:meetingId` relayed: the creator's own Google link is optional. When it is missing the
+  representative account hosts alone (no COHOST member). Ae's own page keeps requiring the creator's link.
+
+Tests: `test/meet-glab-relay.test.ts` and the optional-creator case in `test/managed-meet.test.ts`.
 
 ## SPEC-MANAGED-MEET-CALLBACK-PER-EMBEDDING
 
@@ -79,10 +83,22 @@ neco 2026-10-15「Meet の代表アカウントは、GLAB の組織で予約し�
 - A representative (Ae's or an organization's) cannot run the creator link, which would replace its organizer token.
 
 Tests: `test/meet-glab-relay.test.ts`, `test/meet-oauth.test.ts`.
-- `POST /api/meet/:meetingId` relayed: the creator's own Google link is optional. When it is missing the
-  representative account hosts alone (no COHOST member). Ae's own page keeps requiring the creator's link.
 
-Tests: `test/meet-glab-relay.test.ts` and the optional-creator case in `test/managed-meet.test.ts`.
+## SPEC-MANAGED-MEET-EXTERNAL-EVENT
+
+neco 2026-10-15「(Meet を GLAB のイベント (予定) にも) つけます」.
+
+- `GET|POST /api/meet/external/glab-event/:eventId` (relayed by GLab only; id `[A-Za-z0-9_-]{1,100}`). GLab owns the
+  event and decides who may see it or issue its link; Ae keeps only the space record `meet_external_space`
+  (`source='glab-event'`, `resource_id=<eventId>`), with the same create-intent / configure / `uncertain` states as
+  `meeting_meet`.
+- `POST` body `{ organizationId? }`: the organization must be one of the caller's signed memberships. A new space is
+  hosted by that organization's representative when authorized, otherwise by Ae's representative. Any relayed caller
+  may retry (GLab limits it to the event creator and administrators); the creator's own Google link is optional.
+- Deleting the GLab event does not delete the Google space (same as cancelling an Ae meeting).
+- The GLab callback list now also holds the AWS public URL `https://glab.ai-run-do.com` (neco 2026-10-15).
+
+Tests: `test/meet-glab-relay.test.ts`.
 
 ## Setup
 

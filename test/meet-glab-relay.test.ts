@@ -101,6 +101,54 @@ it('keeps only exact HTTPS or loopback redirect URIs from the allowlist env', ()
         .toEqual([redirectUri, 'http://127.0.0.1:5187/cb']);
     expect(parseExternalRedirectUris(undefined)).toEqual([]);
 });
+it('issues a Meet for a GLab event only through the relay, hosted by the chosen organization when it has a representative', async () => {
+    (await db.prepare("INSERT INTO meet_organizer VALUES(1,'ae-admin')").run());
+    (await db.prepare("INSERT INTO meet_group_organizer VALUES('organization','org-1','owner',1)").run());
+    const spaces: string[] = [];
+    const send = vi.fn<typeof fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/v2/spaces') && init?.method === 'POST') {
+            spaces.push(url);
+            return Response.json({ name: `spaces/s${spaces.length}`, meetingUri: `https://meet.google.com/abc-${'x'.repeat(spaces.length)}` });
+        }
+        if (url.includes('/members') && (!init?.method || init.method === 'GET')) return Response.json({ members: [] });
+        return Response.json({});
+    });
+    vi.stubGlobal('fetch', send);
+    const hosts = new Set(['owner', 'ae-admin']);
+    const tokens = vi.fn(async (_module: string, _action: string, payload: Record<string, unknown>) => ({
+        accessToken: `access-${String(payload.userId)}`, refreshToken: 'r', expiresAt: new Date(Date.now() + 3600000).toISOString(), tokenType: 'Bearer', scope: '',
+        metadata: { email: `${String(payload.userId)}@example.com`, subject: String(payload.userId), emailVerified: true, meetOrganizer: hosts.has(String(payload.userId)) },
+    }));
+    try {
+        const meet = app(tokens as unknown as ReturnType<typeof vi.fn<() => Promise<null>>>);
+        const member: Group = { kind: 'organization', id: 'org-1', name: 'GLab' };
+        // Not relayed, or an organization the caller is not in: refused before anything is created.
+        expect((await meet.request('/api/meet/external/glab-event/42', { method: 'POST', headers: { origin: 'https://ae.example', 'content-type': 'application/json', 'x-test-user': 'member' }, body: '{}' })).status).toBe(403);
+        const other = JSON.stringify({ organizationId: 'org-2' });
+        expect((await meet.request('/api/meet/external/glab-event/42', relayed('member', 'POST', '/api/meet/external/glab-event/42', other, false, [member]))).status).toBe(403);
+        expect((await meet.request('/api/meet/external/other/42', relayed('member', 'POST', '/api/meet/external/other/42', '{}'))).status).toBe(404);
+        const body = JSON.stringify({ organizationId: 'org-1' });
+        const issued = await meet.request('/api/meet/external/glab-event/42', relayed('member', 'POST', '/api/meet/external/glab-event/42', body, false, [member]));
+        expect(issued.status).toBe(200);
+        expect(await issued.json()).toEqual({ status: 'ready', url: 'https://meet.google.com/abc-x' });
+        // An event without an organization falls back to Ae's representative.
+        expect((await meet.request('/api/meet/external/glab-event/43', relayed('member', 'POST', '/api/meet/external/glab-event/43', '{}'))).status).toBe(200);
+        expect((await db.prepare('SELECT source, resource_id, organizer_id FROM meet_external_space ORDER BY resource_id').all())).toEqual([
+            { source: 'glab-event', resource_id: '42', organizer_id: 'owner' },
+            { source: 'glab-event', resource_id: '43', organizer_id: 'ae-admin' },
+        ]);
+        // Retrying a ready event never creates a second space, and reading needs the relay too.
+        expect((await meet.request('/api/meet/external/glab-event/42', relayed('other', 'POST', '/api/meet/external/glab-event/42', '{}'))).status).toBe(200);
+        expect(spaces).toHaveLength(2);
+        expect(await (await meet.request('/api/meet/external/glab-event/42', relayed('member', 'GET', '/api/meet/external/glab-event/42'))).json())
+            .toEqual({ status: 'ready', url: 'https://meet.google.com/abc-x' });
+        expect((await meet.request('/api/meet/external/glab-event/42', { headers: { 'x-test-user': 'member' } })).status).toBe(403);
+    }
+    finally {
+        vi.unstubAllGlobals();
+    }
+});
 const representative: Group = { kind: 'organization', id: 'org-1', name: 'GLab', representative: true };
 it('lets only the organization representative start an organization organizer authorization', async () => {
     const meet = app();
