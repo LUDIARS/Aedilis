@@ -5,7 +5,7 @@ export const TABLES = Object.freeze([
   'attendance', 'checkin_event_summary', 'gps_checkin_photo', 'meeting_identity',
   'meeting_device', 'meeting_poll', 'meeting_response', 'meeting_outbox',
   'meet_organizer', 'meet_group_organizer', 'meet_external_space', 'meet_oauth_state', 'meeting_meet', 'booking_audience',
-  'meeting_facility_reservation', 'meeting_discord_respondent',
+  'meeting_facility_reservation', 'meeting_discord_respondent', 'meeting_glab_handoff',
 ]);
 export const MAX_BYTES = 64 * 1024 * 1024;
 export const PG_TYPES = Object.freeze({ INTEGER: 'BIGINT', REAL: 'DOUBLE PRECISION', TEXT: 'TEXT' });

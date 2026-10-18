@@ -10,7 +10,7 @@ export interface Answer {
 }
 export interface Meeting extends MeetingDraft {
   id: string; state: 'open' | 'finalized' | 'cancelled'; selectedSlot: string | null;
-  revision: number; canManage: boolean; responses: Answer[];
+  revision: number; canManage: boolean; responses: Answer[]; glabHandoff?: boolean;
   discordRespondent?: { displayName: string } | null;
 }
 export interface Config { googleClientId: string; cernereUrl: string; discordEnabled: boolean }

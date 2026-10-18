@@ -11,7 +11,8 @@ export function renderMeeting(meeting: Meeting, selectResponse: (answer: Answer)
   element('meeting-online').textContent = `${meeting.onlineAllowed ? 'オンライン参加可' : 'オンライン参加不可'} · ${meeting.guestResponses ? 'ログインなしで回答できます' : '回答にはログインが必要です'}`;
   element('meeting-state').textContent = { open: '日程調整中', finalized: '開催日時が決まりました', cancelled: 'この会議は中止されました' }[meeting.state];
   element<HTMLInputElement>('share-url').value = location.href;
-  element('manage').hidden = !meeting.canManage || meeting.state === 'cancelled';
+  element('manage').hidden = !meeting.canManage || meeting.state === 'cancelled' || !!meeting.glabHandoff;
+  if (meeting.glabHandoff && meeting.state !== 'cancelled') element('meeting-state').textContent = 'GLABの予定へ引き継ぎ済みです。出欠の確認・中止はGLABで行ってください。';
   element<HTMLSelectElement>('final-slot').innerHTML = meeting.slots.map(s => `<option value="${escape(s.id)}" ${isBusy(meeting, s) ? 'disabled' : ''}>${escape(label(s))} / ${escape(s.venue || '会場未定')}${isBusy(meeting, s) ? '（会場利用不可）' : ''}</option>`).join('');
   const final = meeting.slots.find(s => s.id === meeting.selectedSlot);
   if (final) element<HTMLSelectElement>('final-slot').value = final.id;

@@ -17,6 +17,7 @@ import type { MeetingConfig } from './config.ts';
 import { discordIdentity } from './discord.ts';
 import { registerDiscordHandoff } from './discord-handoff.ts';
 import { MeetingRepository } from './repository.ts';
+import { registerGlabHandoff } from './glab-handoff.ts';
 import { MeetingError, type Candidate } from './types.ts';
 import { meetingInput, object, responseInput, revision, text } from './validation.ts';
 export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, client: CernereProjectClient, facilities?: FacilitySource): Hono {
@@ -184,6 +185,7 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
         })());
         return c.json({ ok: true });
     });
+    registerGlabHandoff(app, db);
     app.post('/:id/finalize', async (c) => {
         const body = object(await c.req.json());
         (await repo.finalize(c.req.param('id'), text(body.slotId, 64, true), revision(body.revision), await actorFor(db, c)));

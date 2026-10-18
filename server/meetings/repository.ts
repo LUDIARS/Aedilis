@@ -1,5 +1,6 @@
 import { isPostgres, prepare, transaction, type DatabaseInput } from '../persistence/database.ts';
 import { randomUUID } from 'node:crypto';
+import { glabHandoff, requireLocalMeeting } from './glab-handoff-state.ts';
 import { releaseMeetingFacility, reserveMeetingFacility } from './facility-reservation.ts';
 import { owns } from './identity.ts';
 import { requireResponder } from './participation-policy.ts';
@@ -37,6 +38,7 @@ export class MeetingRepository {
     }
     async update(id: string, input: MeetingInput, expected: number, actor: Actor): Promise<void> {
         (await transaction(this.db, async () => {
+            await requireLocalMeeting(this.db, id);
             const row = (await this.get(id));
             this.requireOwner(row, actor);
             this.requireRevision(row.revision, expected);
@@ -59,6 +61,7 @@ export class MeetingRepository {
     }
     async finalize(id: string, slotId: string, expected: number, actor: Actor): Promise<void> {
         (await transaction(this.db, async () => {
+            await requireLocalMeeting(this.db, id);
             const row = (await this.get(id));
             this.requireOwner(row, actor);
             this.requireRevision(row.revision, expected);
@@ -75,8 +78,9 @@ export class MeetingRepository {
             (await this.enqueue(id, 'meeting_finalized', (await this.responses(id)).map(r => r.owner_id), actor));
         })());
     }
-    async cancel(id: string, expected: number, actor: Actor): Promise<void> {
+    async cancel(id: string, expected: number, actor: Actor, fromGlab = false): Promise<void> {
         (await transaction(this.db, async () => {
+            if (!fromGlab) await requireLocalMeeting(this.db, id);
             const row = (await this.get(id));
             this.requireOwner(row, actor);
             this.requireRevision(row.revision, expected);
@@ -157,6 +161,7 @@ export class MeetingRepository {
             id: row.id, title: row.title, description: row.description, organizerName: row.organizer_name, onlineAllowed: row.online_allowed === 1, guestResponses: row.guest_responses === 1,
             slots: JSON.parse(row.slots_json), venues: JSON.parse(row.venues_json), state: row.state,
             selectedSlot: row.selected_slot, revision: row.revision, canManage: mine,
+            glabHandoff: !!(await glabHandoff(this.db, id)),
             discordRespondent: actor.discord ?? null,
             responses: (await this.responses(id)).map(r => ({ id: r.id, name: r.name, comment: r.comment, topic: r.topic, answers: JSON.parse(r.answers_json), defaultOnline: r.default_online === 1, online: JSON.parse(r.online_json), revision: r.revision, canEdit: owns(actor, r.owner_id) })),
         };

@@ -4,11 +4,13 @@ import { migrateMeet } from '../meet/schema.ts';
 import { ensureBookingAccessSchema } from '../booking-access/policy.ts';
 import { type DatabaseInput } from '../persistence/database.ts';
 import { PostgresDatabase } from '../persistence/postgres.ts';
+import { GLAB_HANDOFF_SCHEMA } from '../meetings/glab-handoff-state.ts';
 
 /** Verify the transferred schema against the same service-owned schema used by HQ and tests. */
 async function verifyPostgres(database: PostgresDatabase): Promise<void> {
   const identity = (await database.all<{ database: string; role: string }>('SELECT current_database() AS database, current_user AS role', []))[0];
   if (identity?.database !== 'aedilis' || identity.role !== 'aedilis_app') throw new Error('Ae PostgreSQL database or role does not match the approved target');
+  await database.run(GLAB_HANDOFF_SCHEMA, []);
   const reference = openDb(':memory:');
   try {
     migrateMeetings(reference); migrateMeet(reference); ensureBookingAccessSchema(reference);

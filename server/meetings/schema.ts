@@ -1,5 +1,6 @@
 import { isPostgres, type DatabaseInput } from '../persistence/database.ts';
 import { migrateDiscordRespondents } from './discord-respondent.ts';
+import { GLAB_HANDOFF_SCHEMA } from './glab-handoff-state.ts';
 /** Additive schema only; existing reservation data is never rewritten. */
 export function migrateMeetings(db: DatabaseInput): void {
     if (isPostgres(db))
@@ -37,6 +38,7 @@ export function migrateMeetings(db: DatabaseInput): void {
     );
     CREATE INDEX IF NOT EXISTS meeting_outbox_due ON meeting_outbox(status, due_at);
   `);
+    db.exec(GLAB_HANDOFF_SCHEMA);
     const columns = db.prepare('PRAGMA table_info(meeting_poll)').all() as {
         name: string;
     }[];
