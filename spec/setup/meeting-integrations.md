@@ -8,17 +8,42 @@ when preparing a deployment. No service has been started by this implementation.
 
 Create a Google OAuth web client with Calendar API enabled and register Aedilis'
 exact public origin in Authorized JavaScript origins. Set
-`AEDILIS_GOOGLE_CLIENT_ID` (public identifier), or `googleClientId` in
-`server/meetings/settings.json`. The selected scopes are
+`AEDILIS_GOOGLE_CLIENT_ID` (public identifier) through Excubitor's Vault binding for
+`aedilis`. This is the same OAuth web client used by managed Google Meet; do not
+create or configure a client per user, meeting, browser, or embedding service.
+The former `server/meetings/settings.json` client setting is no longer read.
+Move an existing nonempty JSON setting into the Vault entry before deployment.
+The selected scopes are
 `calendar.calendarlist.readonly` and `calendar.events.readonly`. Follow Google's
 consent-screen/publishing requirements for the intended users.
 
-No Google client secret or refresh token is needed. The access token remains only
+Calendar import does not receive the client secret or a refresh token. The access token remains only
 in page memory and is cleared on pagehide. Cernere login is not required to import.
 All-day dates are interpreted as local calendar days, with Google's exclusive end
 date. Timed events preserve their supplied UTC offset. Recurrences are expanded
 by Google (`singleEvents=true`); pages are fetched until complete, capped at 2000
 events to avoid silently publishing an incomplete result.
+
+### One-time administrator setup (Calendar and Meet)
+
+Create one Google OAuth **Web application** client, enable the Calendar and Meet
+APIs, and configure its consent screen for the intended users. In that same client,
+register Ae's exact JavaScript origin and its `/api/meet/oauth/callback` redirect URI.
+Register the exact GLab callback URI from `AEDILIS_MEET_GLAB_REDIRECT_URIS` as well
+when GLab embeds Ae. The two callback paths remain distinct, but use one client.
+
+Store `AEDILIS_GOOGLE_CLIENT_ID` and `AEDILIS_GOOGLE_CLIENT_SECRET` once in Ex Vault
+and bind them to `aedilis`. Both integrations read `server/lib/google-oauth-config.ts`;
+only the public client ID is sent to the Calendar browser configuration. Never put
+the client secret into JSON settings, browser storage, source control or chat.
+The same persistent binding supplies subsequent restarts and deployments.
+
+This operator setup is separate from each user's Google consent. Calendar import
+keeps its page-memory token model; Meet retains its existing Cernere token storage
+and refresh flow. Revoked or expired authorization can still require consent again.
+No automatic account sharing or expansion of scopes is introduced.
+
+Reference: https://developers.google.com/identity/protocols/oauth2/web-server
 
 ## Cernere registration and ownership
 

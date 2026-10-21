@@ -1,3 +1,5 @@
+import { googleOAuthClientConfig } from '../lib/google-oauth-config.ts';
+
 /** Trusted front ends that embed Ae and relay its API with a signed context. */
 export type RelaySource = 'glab';
 
@@ -30,8 +32,7 @@ export function parseExternalRedirectUris(value: string | undefined): string[] {
 export function meetConfig(publicUrl: string): MeetConfig {
   return {
     publicUrl,
-    clientId: process.env.AEDILIS_GOOGLE_CLIENT_ID?.trim() || '',
-    clientSecret: process.env.AEDILIS_GOOGLE_CLIENT_SECRET?.trim() || '',
+    ...googleOAuthClientConfig(),
     // AEDILIS_MEET_EXTERNAL_REDIRECT_URIS is the earlier name of GLab's list; read only when the new one is unset.
     externalRedirectUris: {
       glab: parseExternalRedirectUris(process.env.AEDILIS_MEET_GLAB_REDIRECT_URIS ?? process.env.AEDILIS_MEET_EXTERNAL_REDIRECT_URIS),
