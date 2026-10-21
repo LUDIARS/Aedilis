@@ -1,5 +1,7 @@
 # SPEC-AEDILIS-BOOTSTRAP
 
+`GET /api/health` は成功時・DB障害時とも `version` に `corpusManifest.version` を返す。現在は `0.2.0`。GLabのサービス状況はこの値を表示し、マニフェストと異なる番号を独自管理しない。
+
 service-runtimeは導入時の依存準備・サーバー/画面ビルドを所有する支援境界。scripts/site/setup.mjsは引数なし・非対話でログ用submoduleのロック済依存とビルド、アプリのロック済依存とビルドを準備し、両方の開発依存を除去する。失敗時は非0終了する。npm呼出は同じNode・明示cwd・shellなしで行う。
 
 通常起動は `node dist/server/bootstrap.js`。実行時にtsx・compiler・watcher・画面ビルドを要求しない。`tsconfig.build.json`はNodeNextでサーバーのみを出力し、相対.ts importを.jsへ変換する。JSON設定も出力される。既定DB/施設マスタは本体checkoutのcwd基準とし、dist以下へ移動しない。Excubitorのcwdは本体checkout rootを維持する。

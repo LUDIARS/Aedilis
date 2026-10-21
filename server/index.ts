@@ -119,10 +119,11 @@ const DEFAULT_GATEWAY_URL =
 app.get('/api/health', async (c) => {
   const databaseBackend = isPostgres(db) ? 'postgres' : 'sqlite';
   try { await prepare(db, 'SELECT 1 AS healthy').get(); }
-  catch { return c.json({ ok: false, service: 'aedilis', databaseBackend }, 503); }
+  catch { return c.json({ ok: false, service: 'aedilis', version: corpusManifest.version, databaseBackend }, 503); }
   return c.json({
     ok: true,
     service: 'aedilis',
+    version: corpusManifest.version,
     port: PORT,
     databaseBackend,
     defaultGatewayUrl: DEFAULT_GATEWAY_URL,
