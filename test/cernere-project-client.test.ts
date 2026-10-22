@@ -250,7 +250,7 @@ describe('CernereProjectClient — getVantanUserProfile()', () => {
       action: 'get_user_data',
       payload: {
         userId: 'user-42',
-        targetProjectKey: 'vantan_user',
+        targetProjectKey: 'glab',
         columns: ['department_name', 'grade', 'name', 'desired_job'],
       },
     });

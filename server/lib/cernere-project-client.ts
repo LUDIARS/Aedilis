@@ -2,7 +2,7 @@
 //
 // Aedilis は Cernere 上に自分専用の最小プロジェクト ("aedilis") として登録され、
 // `user_data.columns` を自前で持たない (= 何も書き込まない)。 唯一の用途は
-// vantan_user プロジェクトが持つ学生プロフィール (department_name / grade / name /
+// glab プロジェクトが持つ学生プロフィール (department_name / grade / name /
 // desired_job) を `managed_project.get_user_data` の `targetProjectKey` 経由で
 // 読み取ること。
 //
@@ -29,7 +29,7 @@
 //   payload に含めるクロスプロジェクト読み取りは、 本タスクと並行して Cernere 側に
 //   実装される予定の新機能で、 マージ済みの実コードをこちらから確認できていない。
 //   本ファイルは指示された契約 —
-//     payload: { userId, targetProjectKey: "vantan_user", columns: [...] }
+//     payload: { userId, targetProjectKey: "glab", columns: [...] }
 //     response payload: { [column]: value or null, ... } (対象行が無い/権限が無い場合は
 //       全カラム null — 既存の同一プロジェクト向け getUserColumns の "no row" 挙動を
 //       踏襲する前提)
@@ -295,7 +295,7 @@ export class CernereProjectClient {
   }
 
   /**
-   * vantan_user プロジェクトが持つ学生プロフィールを読む。
+   * glab プロジェクトの profile モジュールを読み取り共有で読む。
    *
    * - 接続断/認証失敗/タイムアウトなど「本当に失敗」した場合は throw する。
    * - 対象ユーザーの行が無い、 または全カラムが null (データ未入力) の場合は
@@ -305,7 +305,7 @@ export class CernereProjectClient {
     if (!userId || !userId.trim()) throw new Error('getVantanUserProfile: userId is required');
     const raw = await this.request('managed_project', 'get_user_data', {
       userId,
-      targetProjectKey: 'vantan_user',
+      targetProjectKey: 'glab',
       columns: [...VANTAN_COLUMNS],
     });
     return translateVantanProfile(raw);
