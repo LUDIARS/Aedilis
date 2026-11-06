@@ -3,7 +3,7 @@ import { type DatabaseInput } from '../persistence/database.ts';
 //
 // 施設の中身は FacilitySource が権威。 allow_overlap だけは facility_cache が
 // 権威 (admin がトグルできるため)。 一覧表示時に source の最新を cache へ同期する。
-import { Hono } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { requireAdmin, requireAuth } from '../auth.ts';
 import { getFacilityCache, setFacilityOverlap, upsertFacilityCache } from '../db.ts';
 import type { Facility, FacilitySource } from '../facility/source.ts';
@@ -12,7 +12,8 @@ interface FacilityView extends Facility {
     allowOverlap: boolean;
 }
 /** source の施設を cache へ同期しつつ、 allow_overlap は cache の値を採用する。 */
-async function syncAndView(db: DatabaseInput, source: FacilitySource, facility: Facility): Promise<FacilityView> {
+async function syncAndView(db: DatabaseInput, source: FacilitySource, facility: Facility, assertActive: () => void = () => {}): Promise<FacilityView> {
+    assertActive();
     (await upsertFacilityCache(db, {
         facilityId: facility.id,
         displayName: facility.name,
@@ -23,23 +24,27 @@ async function syncAndView(db: DatabaseInput, source: FacilitySource, facility: 
     const cached = (await getFacilityCache(db, facility.id));
     return { ...facility, allowOverlap: (cached?.allow_overlap ?? 0) === 1 };
 }
-export function makeFacilityRouter(db: DatabaseInput, source: FacilitySource): Hono {
+export function makeFacilityRouter(db: DatabaseInput, source: FacilitySource,
+    authenticate: MiddlewareHandler = requireAuth, assertActive: (c: Context) => void = () => {}): Hono {
     const r = new Hono();
     // 施設一覧
-    r.get('/', requireAuth, async (c) => {
+    r.get('/', authenticate, async (c) => {
         const facilities = await source.listFacilities();
-        const items = (await Promise.all(facilities.map(async (f) => (await syncAndView(db, source, f)))));
+        const items = (await Promise.all(facilities.map(async (f) => (await syncAndView(db, source, f, () => assertActive(c))))));
+        assertActive(c);
         return c.json({ items });
     });
     // 施設詳細
-    r.get('/:id', requireAuth, async (c) => {
+    r.get('/:id', authenticate, async (c) => {
         const facility = await source.getFacility(c.req.param('id'));
         if (!facility)
             return c.json({ error: 'facility_not_found' }, 404);
-        return c.json({ facility: (await syncAndView(db, source, facility)) });
+        const view = await syncAndView(db, source, facility, () => assertActive(c));
+        assertActive(c);
+        return c.json({ facility: view });
     });
     // admin: 重複可フラグ切替
-    r.post('/:id/overlap', requireAuth, requireAdmin, async (c) => {
+    r.post('/:id/overlap', authenticate, requireAdmin, async (c) => {
         const id = c.req.param('id');
         const facility = await source.getFacility(id);
         if (!facility)

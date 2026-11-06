@@ -31,6 +31,8 @@ import { startMeetingOutbox } from './meetings/outbox.ts';
 import { meetConfig } from './meet/config.ts';
 import { migrateMeet } from './meet/schema.ts';
 import { managedMeetRoutes } from './meet/routes.ts';
+import { CernereComposite } from './vendor/cernere-composite/composite.js';
+import { GLAB_RESERVATION_PREFIX, makeGlabReservationTarget } from './glab/reservation-target.ts';
 
 // Excubitor runs from the checkout root; compiled code lives under dist/server.
 const ROOT = resolve('.');
@@ -102,6 +104,10 @@ cernereProjectClient.start();
 const stopMeetingOutbox = startMeetingOutbox(db, cernereProjectClient, meetings);
 
 const facilitySource = new LocalFacilitySource(FACILITIES_PATH);
+// Reuse the accepted backend SDK. It authenticates lazily and owns its lifetime;
+// no global user credential or additional startup connection is introduced.
+const glabComposite = new CernereComposite({ cernereUrl: CERNERE_BASE_URL,
+  projectKey: 'aedilis', clientId: CERNERE_CLIENT_ID, clientSecret: CERNERE_CLIENT_SECRET });
 
 const app = new Hono();
 app.use(
@@ -136,6 +142,7 @@ app.get('/api/health', async (c) => {
 app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
+app.route(GLAB_RESERVATION_PREFIX, makeGlabReservationTarget(db, facilitySource, glabComposite.delegations, ADMIN_IDS));
 app.route('/api/meet', managedMeetRoutes(db, cernereProjectClient, meetConfig(AUDIENCE)));
 const meetingRouter = makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource);
 app.route('/api/meetings', meetingRouter);
@@ -178,6 +185,7 @@ async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   stopMeetingOutbox();
+  glabComposite.dispose();
   meetingRouter.dispose();
   cernereProjectClient.close();
   await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

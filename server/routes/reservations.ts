@@ -5,7 +5,7 @@ import { prepare, transaction, type DatabaseInput } from '../persistence/databas
 // 予約は本人が行う (Cernere identity から owner を確定)。 作成・時刻変更時に
 // 同一施設 × 時間帯の重複を検知して 409。 重複可フラグ付き施設はスキップ。
 // キャンセルは本人 or admin。 時刻は分単位に丸める (秒切り捨て、 §3.4)。
-import { Hono } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { bookingPrincipal } from '../booking-access/request.ts';
 import { ensureBookingAccessSchema, readAudience, parseAudience, saveAudience, canReadBooking } from '../booking-access/policy.ts';
 import { getIdentity, requireAuth } from '../auth.ts';
@@ -39,13 +39,14 @@ async function decorate(db: DatabaseInput, rows: ReservationRow[]): Promise<Rese
     }))));
 }
 /** 施設を source から取得し cache へ同期。 allow_overlap は cache の値を返す。 */
-async function resolveFacility(db: DatabaseInput, source: FacilitySource, facilityId: string): Promise<{
+async function resolveFacility(db: DatabaseInput, source: FacilitySource, facilityId: string, assertActive: () => void = () => {}): Promise<{
     exists: boolean;
     allowOverlap: boolean;
 }> {
     const facility = await source.getFacility(facilityId);
     if (!facility)
         return { exists: false, allowOverlap: false };
+    assertActive();
     (await upsertFacilityCache(db, {
         facilityId: facility.id,
         displayName: facility.name,
@@ -56,7 +57,8 @@ async function resolveFacility(db: DatabaseInput, source: FacilitySource, facili
     const cached = (await getFacilityCache(db, facilityId));
     return { exists: true, allowOverlap: (cached?.allow_overlap ?? 0) === 1 };
 }
-export function makeReservationRouter(db: DatabaseInput, source: FacilitySource): Hono {
+export function makeReservationRouter(db: DatabaseInput, source: FacilitySource,
+    authenticate: MiddlewareHandler = requireAuth, assertActive: (c: Context) => void = () => {}): Hono {
     ensureBookingAccessSchema(db);
     const r = new Hono();
     r.use('*', async (c, next) => { c.header('cache-control', 'private, no-store'); await next(); });
@@ -65,7 +67,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         if (error instanceof ReservationRangeError) return c.json({ error: 'bad_request', code: 'startAt must precede endAt' }, 400);
         return c.json({ error: 'booking_access_unavailable' }, 503);
     });
-    r.get('/capabilities', requireAuth, c => c.json({ groupContextVersion: 1 }));
+    r.get('/capabilities', authenticate, c => c.json({ groupContextVersion: 1 }));
     // Existing bookings without an explicit Public policy are not newly exposed anonymously.
     r.get('/public', async (c) => {
         const decorated = await transaction(db, async () => {
@@ -80,7 +82,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         return c.json({ items: decorated.map(({ owner_user_id: _owner, owner_display_name: _name, ...item }) => item) });
     });
     // 予約一覧 (期間 + 施設 filter)
-    r.get('/', requireAuth, async (c) => {
+    r.get('/', authenticate, async (c) => {
         const facilityId = c.req.query('facility') || undefined;
         const from = parseMinute(c.req.query('from')) ?? undefined;
         const to = parseMinute(c.req.query('to')) ?? undefined;
@@ -90,16 +92,19 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
           const visible = await filterAsync(rows, async row => canReadBooking(await readAudience(db, 'reservation', row.id), principal, row.owner_user_id === principal.userId));
           return decorate(db, visible);
         })();
+        assertActive(c);
         return c.json({ items });
     });
     // 自分の予約
-    r.get('/mine', requireAuth, async (c) => {
+    r.get('/mine', authenticate, async (c) => {
         const id = getIdentity(c);
         const rows = (await listReservationsForUser(db, id.userId));
-        return c.json({ items: (await decorate(db, rows)) });
+        const items = await decorate(db, rows);
+        assertActive(c);
+        return c.json({ items });
     });
     // 新規予約 (重複検知 → confirmed)
-    r.post('/', requireAuth, async (c) => {
+    r.post('/', authenticate, async (c) => {
         const body = (await c.req.json().catch(() => null)) as {
             facilityId?: string;
             startAt?: string;
@@ -111,9 +116,8 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         if (!body)
             return c.json({ error: 'bad_json' }, 400);
         const principal = await bookingPrincipal(c);
-        let audience;
         try {
-            audience = parseAudience(body, principal);
+            parseAudience(body, principal);
         }
         catch {
             return c.json({ error: 'invalid_booking_audience' }, 403);
@@ -130,7 +134,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         if (startAt >= endAt) {
             return c.json({ error: 'bad_request', code: 'startAt must precede endAt' }, 400);
         }
-        const facility = await resolveFacility(db, source, facilityId);
+        const facility = await resolveFacility(db, source, facilityId, () => assertActive(c));
         if (!facility.exists)
             return c.json({ error: 'facility_not_found' }, 404);
         if (!facility.allowOverlap) {
@@ -144,6 +148,8 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
             // Recheck under the transaction's cross-process lock; the preflight above is only a fast rejection.
             const currentFacility = await getFacilityCache(db, facilityId);
             if (!currentFacility?.allow_overlap && (await findConflicts(db, facilityId, startAt, endAt)).length) throw new ReservationConflict();
+            const currentAudience = parseAudience(body, await bookingPrincipal(c));
+            assertActive(c);
             const created = (await createReservation(db, {
                 facilityId,
                 ownerUserId: id.userId,
@@ -152,13 +158,13 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
                 purpose: typeof body.purpose === 'string' ? body.purpose : '',
                 state: 'confirmed',
             }));
-            (await saveAudience(db, 'reservation', created.id, audience));
+            (await saveAudience(db, 'reservation', created.id, currentAudience));
             return created;
         })());
         return c.json({ reservation: (await decorate(db, [reservation]))[0] }, 201);
     });
     // 時刻 / 目的の修正 (本人のみ)
-    r.patch('/:id', requireAuth, async (c) => {
+    r.patch('/:id', authenticate, async (c) => {
         const id = getIdentity(c);
         const reservationId = c.req.param('id');
         if ((await prepare(db, 'SELECT 1 FROM meeting_facility_reservation WHERE reservation_id=?').get(reservationId)))
@@ -180,9 +186,8 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         if (!body)
             return c.json({ error: 'bad_json' }, 400);
         const principal = await bookingPrincipal(c);
-        let audience;
         try {
-            audience = parseAudience(body, principal, (await readAudience(db, 'reservation', reservationId)));
+            parseAudience(body, principal, (await readAudience(db, 'reservation', reservationId)));
         }
         catch {
             return c.json({ error: 'invalid_booking_audience' }, 403);
@@ -197,7 +202,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         }
         // 時刻が変わるなら重複再検知
         if (startAt !== current.start_at || endAt !== current.end_at) {
-            const facility = await resolveFacility(db, source, current.facility_id);
+            const facility = await resolveFacility(db, source, current.facility_id, () => assertActive(c));
             if (!facility.allowOverlap) {
                 const conflicts = (await findConflicts(db, current.facility_id, startAt, endAt, reservationId));
                 if (conflicts.length > 0) {
@@ -208,18 +213,21 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         const updated = (await transaction(db, async () => {
             const latest = await getReservation(db, reservationId);
             if (!latest || latest.state === 'cancelled') return null;
+            if (latest.owner_user_id !== id.userId) return null;
             const lockedStart = body.startAt === undefined ? latest.start_at : startAt;
             const lockedEnd = body.endAt === undefined ? latest.end_at : endAt;
             if (lockedStart >= lockedEnd) throw new ReservationRangeError();
             const currentFacility = await getFacilityCache(db, latest.facility_id);
             if (!currentFacility?.allow_overlap && (await findConflicts(db, latest.facility_id, lockedStart, lockedEnd, reservationId)).length) throw new ReservationConflict();
+            const currentAudience = parseAudience(body, await bookingPrincipal(c), await readAudience(db, 'reservation', reservationId));
+            assertActive(c);
             const result = (await updateReservation(db, reservationId, {
                 startAt: lockedStart,
                 endAt: lockedEnd,
                 purpose: body.purpose,
             }));
             if (result)
-                (await saveAudience(db, 'reservation', reservationId, audience));
+                (await saveAudience(db, 'reservation', reservationId, currentAudience));
             return result;
         })());
         if (!updated)
@@ -227,7 +235,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         return c.json({ reservation: (await decorate(db, [updated]))[0] });
     });
     // キャンセル (本人 or admin)
-    r.delete('/:id', requireAuth, async (c) => {
+    r.delete('/:id', authenticate, async (c) => {
       return transaction(db, async () => {
         const id = getIdentity(c);
         const reservationId = c.req.param('id');
@@ -240,6 +248,7 @@ export function makeReservationRouter(db: DatabaseInput, source: FacilitySource)
         if (current.owner_user_id !== id.userId && !id.isAdmin) {
             return c.json({ error: 'forbidden', code: 'owner or admin only' }, 403);
         }
+        assertActive(c);
         const cancelled = (await cancelReservation(db, reservationId));
         if (!cancelled)
             return c.json({ error: 'not_found' }, 404);

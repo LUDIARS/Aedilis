@@ -1,0 +1,11 @@
+{
+  "name": "glab-delegation",
+  "description": "One-operation GLAB delegation into existing Aedilis facility/reservation ACLs.",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    { "pathPattern": "(^|/)server/glab/(?:.*/)?[^/]+$" },
+    { "pathPattern": "(^|/)test/glab-reservation-target\\.test\\.ts$" }
+  ],
+  "specRefs": ["spec/feature/glab-reservation-delegation.md"]
+}
