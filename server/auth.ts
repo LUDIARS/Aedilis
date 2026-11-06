@@ -118,6 +118,11 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
 
 /** Optional identity for the public meeting surface. Invalid/expired tokens confer no rights. */
 export async function readIdentity(c: Context): Promise<AuthIdentity | null> {
+  // Direct meetings uses its own online-checked session exclusively. GLAB's signed
+  // proxy assertion remains a separate contract and is validated by bookingPrincipal.
+  if (new URL(c.req.url).pathname.startsWith('/api/meetings') && !c.req.header('x-glab-booking-context')) {
+    return c.get('meetingAuth') ?? null;
+  }
   try {
     const token = extractToken(c);
     return token ? await verifyToken(token) : null;
@@ -143,5 +148,6 @@ export function getIdentity(c: Context): AuthIdentity {
 declare module 'hono' {
   interface ContextVariableMap {
     auth: AuthIdentity;
+    meetingAuth: AuthIdentity | null;
   }
 }

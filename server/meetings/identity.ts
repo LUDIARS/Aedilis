@@ -11,16 +11,16 @@ export { deviceIdentity } from './device-identity.ts';
 const COOKIE = 'aedilis_meeting_device';
 const LIFETIME = 180 * 86400;
 export async function actorFor(db: DatabaseInput, c: Context): Promise<Actor> {
-    const discord = (await discordRespondentActor(db, c));
+    const discord = c.get('meetingAuth') ? null : (await discordRespondentActor(db, c));
     if (discord)
         return discord;
-    const auth = await readIdentity(c);
-    const userId = auth?.projectKey === 'aedilis' ? auth.userId : null;
+    const principal = await bookingPrincipal(c);
+    const auth = c.get('meetingAuth') ?? c.get('auth') ?? await readIdentity(c);
+    const userId = auth?.projectKey === 'aedilis' ? auth.userId : principal.source === 'glab' ? principal.userId : null;
     const identities = userId ? (await prepare(db, 'SELECT id, user_id, notify FROM meeting_identity WHERE user_id = ? ORDER BY created_at').all(userId)) as IdentityRow[] : [];
     const device = (await deviceIdentity(db, getCookie(c, COOKIE)));
     if (device && !device.user_id && !identities.some(i => i.id === device.id))
         identities.push(device);
-    const principal = await bookingPrincipal(c);
     return { identities, current: identities[0] ?? null, userId, groups: principal.groups };
 }
 export async function ensureActor(db: DatabaseInput, c: Context, actor: Actor, secure: boolean): Promise<Actor> {

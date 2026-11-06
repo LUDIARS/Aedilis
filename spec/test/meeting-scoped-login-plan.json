@@ -1,0 +1,12 @@
+{
+  "task": "actio:4e6c8a10-8f40-46e5-b9d3-47bb5691920c",
+  "basis": "augur plan の既存挙動固定案を認証境界の具体的な対テストへ展開",
+  "execution": "担当sessionでは実行禁止。Revisorへ委託",
+  "pairs": [
+    { "test": "test/meeting-pkce-browser.test.ts", "accept": "S256とランダムstate、正当popup応答", "reject": "別source/origin/state、終了・abort・dispose・連打" },
+    { "test": "test/meeting-scoped-sessions.test.ts", "accept": "一度のcode/verifier交換と原期限内bind", "reject": "nonce期限・replay・競合・別project・過長grant・交換結果不明" },
+    { "test": "test/meeting-scoped-sessions.test.ts", "accept": "正確なbinding/action/resource/digest/request IDと現在ACL", "reject": "失効・照会不明・logout競合・risk drift・ACL変更・実行結果不明再送" },
+    { "test": "test/meeting-scoped-routes.test.ts", "accept": "正当loginと安全なopaque Cookie、既存guest device", "reject": "CSRF/Origin/nonce、旧Cookie/Bearerへの昇格、対象owner変更" },
+    { "test": "test/meeting-create-route.test.ts", "accept": "新sessionでの既存作成・再読込・編集フロー", "reject": "不正入力とルート不一致" }
+  ]
+}

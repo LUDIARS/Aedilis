@@ -13,7 +13,7 @@ export interface Meeting extends MeetingDraft {
   revision: number; canManage: boolean; responses: Answer[]; glabHandoff?: boolean;
   discordRespondent?: { displayName: string } | null;
 }
-export interface Config { googleClientId: string; cernereUrl: string; discordEnabled: boolean }
+export interface Config { googleClientId: string; cernereUrl: string; cernereClientId: string; discordEnabled: boolean }
 export { request } from './request.ts';
 export function element<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);

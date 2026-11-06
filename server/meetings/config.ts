@@ -3,6 +3,7 @@ import { googleOAuthClientConfig } from '../lib/google-oauth-config.ts';
 
 export interface MeetingConfig {
   publicUrl: string; cernereUrl: string; cernerePublicUrl: string; googleClientId: string;
+  cernereClientId?: string; cernereClientSecret?: string;
   discordToken: string | null; notificationIntervalMs: number; notificationMaxAttempts: number;
   discordHandoffUrl?: string | null; discordHandoffGuildId?: string | null;
 }
@@ -28,6 +29,8 @@ export function meetingConfig(publicUrl: string, cernereUrl: string): MeetingCon
     const url = new URL(value);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Meeting integration URLs must be HTTP(S), without credentials');
   }
-  return { publicUrl, cernereUrl, cernerePublicUrl, discordHandoffUrl, discordHandoffGuildId, googleClientId: googleOAuthClientConfig().clientId, discordToken: token || null,
+  const cernereClientId = process.env.CERNERE_PROJECT_CLIENT_ID?.trim();
+  const cernereClientSecret = process.env.CERNERE_PROJECT_CLIENT_SECRET?.trim();
+  return { publicUrl, cernereUrl, cernerePublicUrl, cernereClientId, cernereClientSecret, discordHandoffUrl, discordHandoffGuildId, googleClientId: googleOAuthClientConfig().clientId, discordToken: token || null,
     notificationIntervalMs: settings.notificationIntervalMs, notificationMaxAttempts: settings.notificationMaxAttempts };
 }

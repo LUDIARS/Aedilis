@@ -1,0 +1,3 @@
+# Reviewed Git blobs and the managed contract runtime keep their exact bytes.
+server/vendor/cernere-composite/* -text
+server/lib/contract-runtime.ts -text

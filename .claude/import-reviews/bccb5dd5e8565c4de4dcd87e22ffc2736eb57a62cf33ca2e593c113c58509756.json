@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "command": "node scripts/import-cernere-composite.mjs <reviewed-local-cernere-repository>",
+  "cwd": ".",
+  "reviewer": "Ae Codex implementation session",
+  "reviewedAt": "2026-11-06T05:52:32.357Z",
+  "decision": "allow",
+  "sources": [
+    {
+      "origin": "https://github.com/LUDIARS/Cernere.git",
+      "pinnedRevision": "b2bc69cf2130c719fa4db3db9cdcf44f4c5f5836; exact Git blobs with per-file SHA-256 source-lock.json",
+      "historyFrom": "2026-10-30T05:52:32.357Z",
+      "historyTo": "2026-11-06T05:52:32.357Z",
+      "historyStatus": "reviewed",
+      "historySummary": "Reviewed local non-shallow seven-day history, composite package delta and complete initial five-module backend closure. Pinned Revisor #3627 merge is the requested authoritative artifact; no remote latest-version or npm archive claim. No additional package execution, install hook, binary or transitive npm import.",
+      "evidence": [
+        {
+          "path": ".local/import-review/cernere-history-final-v2.json",
+          "sha256": "0fe813cbd414d020396f394a33dce905924ca556561d6fce81dd985984944dd1"
+        },
+        {
+          "path": "spec/security/cernere-composite-source-review.md",
+          "sha256": "c0dd9a430bc8ad16cc6bd1b919de72d38cf32ac1df40d2732594f00c08909cdf"
+        },
+        {
+          "path": "server/vendor/cernere-composite/composite.ts",
+          "sha256": "953b90a99c1884631710967b46af39cc4285f28182e49b5ab7377fa31dc61bdd"
+        },
+        {
+          "path": "server/vendor/cernere-composite/delegation.ts",
+          "sha256": "cb93c642cfb40fe1e62f793f43d511996d99eeb29dc6787c5a6ce4421020817c"
+        },
+        {
+          "path": "server/vendor/cernere-composite/LICENSE",
+          "sha256": "66f59a74cffaf242f3b21c0f3926df8e4272f0f5da90c4b0b73c36073834b677"
+        },
+        {
+          "path": "server/vendor/cernere-composite/service-identity.ts",
+          "sha256": "b9035df49abcfed9cd6ef53891e5bff415e903c750a96ba8254b568d0d2f167c"
+        },
+        {
+          "path": "server/vendor/cernere-composite/service-session.ts",
+          "sha256": "ec5fa9754b90beba4b7a7dadd7b27429583a5cccb4453588cf1562a147f1f53e"
+        },
+        {
+          "path": "server/vendor/cernere-composite/source-lock.json",
+          "sha256": "4892a604a2e1cbc573e6ce80fbe027fe755c6360cc85c4a2b3357f961f8b1a2d"
+        },
+        {
+          "path": "server/vendor/cernere-composite/types.ts",
+          "sha256": "44ca529d30f4d3e1c3f7ace5601b75610f6c6eb3b9a4c258630539d0eb9ed232"
+        }
+      ]
+    }
+  ],
+  "network": {
+    "status": "necessary-only",
+    "summary": "Importer only reads exact local Git blobs; no remote traffic. Runtime explicit Cr authority requests only: project login(client credential), exchange(code/verifier), service bind/check/revoke/authorize/consume(scoped token/session binding/action/resource/digest/request ID). HTTPS/loopback only, redirects rejected, finite abort. No telemetry, process execution, direct socket or dynamic eval. See reviewed analysis for payloads and inactive SDK APIs."
+  },
+  "dependencies": {
+    "status": "reviewed",
+    "summary": "Five unmodified backend modules with node:crypto only; MIT. No React, WebAuthn, service-adapter, native, npm package install or lockfile change. Shared authentication is retained instead of custom crypto. SDK subsidiary modules retained solely for the unchanged import closure."
+  },
+  "installScripts": {
+    "status": "reviewed",
+    "summary": "Source-only importer invokes git show without shell. Upstream package tsc build/prepublishOnly inspected but not imported/executed. No install hook or CI/publish payload is part of the executable closure. No script disabling flags used."
+  },
+  "inputs": [
+    {
+      "path": "server/vendor/cernere-composite/composite.ts",
+      "sha256": "953b90a99c1884631710967b46af39cc4285f28182e49b5ab7377fa31dc61bdd"
+    },
+    {
+      "path": "server/vendor/cernere-composite/delegation.ts",
+      "sha256": "cb93c642cfb40fe1e62f793f43d511996d99eeb29dc6787c5a6ce4421020817c"
+    },
+    {
+      "path": "server/vendor/cernere-composite/LICENSE",
+      "sha256": "66f59a74cffaf242f3b21c0f3926df8e4272f0f5da90c4b0b73c36073834b677"
+    },
+    {
+      "path": "server/vendor/cernere-composite/service-identity.ts",
+      "sha256": "b9035df49abcfed9cd6ef53891e5bff415e903c750a96ba8254b568d0d2f167c"
+    },
+    {
+      "path": "server/vendor/cernere-composite/service-session.ts",
+      "sha256": "ec5fa9754b90beba4b7a7dadd7b27429583a5cccb4453588cf1562a147f1f53e"
+    },
+    {
+      "path": "server/vendor/cernere-composite/source-lock.json",
+      "sha256": "4892a604a2e1cbc573e6ce80fbe027fe755c6360cc85c4a2b3357f961f8b1a2d"
+    },
+    {
+      "path": "server/vendor/cernere-composite/types.ts",
+      "sha256": "44ca529d30f4d3e1c3f7ace5601b75610f6c6eb3b9a4c258630539d0eb9ed232"
+    },
+    {
+      "path": ".gitattributes",
+      "sha256": "6248f280a3f0ed14aff11b080b5eebc754ec57c3df6c61a309c617d23b14c0cc"
+    },
+    {
+      "path": "scripts/import-cernere-composite.mjs",
+      "sha256": "df56a9afa094879b29d279ad3f1dc19bdb1c52a0835554083aecd461a43b2bae"
+    },
+    {
+      "path": "package.json",
+      "sha256": "c2a0fe09f757ebb88cd94c45d7afa4602df682425a151115372d5af1175a46ad"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "305d83b06bd0c95b59f3354a8bb2d41843913a7e3e8f41f01f00959c8a9072a8"
+    }
+  ]
+}

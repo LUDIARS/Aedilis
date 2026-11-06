@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/LUDIARS/Cernere.git",
+  "commit": "b2bc69cf2130c719fa4db3db9cdcf44f4c5f5836",
+  "path": "packages/composite/src",
+  "files": {
+    "composite.ts": "953b90a99c1884631710967b46af39cc4285f28182e49b5ab7377fa31dc61bdd",
+    "service-session.ts": "ec5fa9754b90beba4b7a7dadd7b27429583a5cccb4453588cf1562a147f1f53e",
+    "types.ts": "44ca529d30f4d3e1c3f7ace5601b75610f6c6eb3b9a4c258630539d0eb9ed232",
+    "delegation.ts": "cb93c642cfb40fe1e62f793f43d511996d99eeb29dc6787c5a6ce4421020817c",
+    "service-identity.ts": "b9035df49abcfed9cd6ef53891e5bff415e903c750a96ba8254b568d0d2f167c"
+  }
+}

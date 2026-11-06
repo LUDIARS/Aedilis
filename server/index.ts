@@ -136,7 +136,8 @@ app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
 app.route('/api/meet', managedMeetRoutes(db, cernereProjectClient, meetConfig(AUDIENCE)));
-app.route('/api/meetings', makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource));
+const meetingRouter = makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource);
+app.route('/api/meetings', meetingRouter);
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 // 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。
@@ -176,6 +177,7 @@ async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   stopMeetingOutbox();
+  meetingRouter.dispose();
   cernereProjectClient.close();
   await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
   if (isPostgres(db)) await db.close();

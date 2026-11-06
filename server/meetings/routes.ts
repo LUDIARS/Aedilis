@@ -8,11 +8,13 @@ import type { FacilitySource } from '../facility/source.ts';
 import { publicFacilities, validateFacilities } from './facilities.ts';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { deleteCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { CernereProjectClient } from '../lib/cernere-project-client.ts';
 import { actorFor, ensureActor, linkActor } from './identity.ts';
-import { beginLogin, completeLogin } from './cernere-login.ts';
+import { beginLogin, completeLogin, logout } from './cernere-login.ts';
+import { CernereComposite } from '../vendor/cernere-composite/composite.js';
+import { MeetingSessions } from './scoped-sessions.ts';
+import { scopedMeetings } from './scoped-middleware.ts';
 import type { MeetingConfig } from './config.ts';
 import { discordIdentity } from './discord.ts';
 import { registerDiscordHandoff } from './discord-handoff.ts';
@@ -20,9 +22,16 @@ import { MeetingRepository } from './repository.ts';
 import { registerGlabHandoff } from './glab-handoff.ts';
 import { MeetingError, type Candidate } from './types.ts';
 import { meetingInput, object, responseInput, revision, text } from './validation.ts';
-export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, client: CernereProjectClient, facilities?: FacilitySource): Hono {
+export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, client: CernereProjectClient, facilities?: FacilitySource, injectedSessions?: MeetingSessions): Hono & { dispose: () => void } {
     const app = new Hono(), repo = new MeetingRepository(db);
     const origin = new URL(config.publicUrl).origin, secure = origin.startsWith('https:');
+    const composite = config.cernereClientId && config.cernereClientSecret ? new CernereComposite({ cernereUrl: config.cernereUrl,
+      projectKey: 'aedilis', clientId: config.cernereClientId, clientSecret: config.cernereClientSecret }) : undefined;
+    const sessions = injectedSessions ?? (composite ? new MeetingSessions(composite) : undefined);
+    const requireSessions = (): MeetingSessions => {
+      if (!sessions || !secure) throw new MeetingError(503, 'HTTPSとCernereログイン設定を確認してください');
+      return sessions;
+    };
     const limits = new Map<string, {
         count: number;
         until: number;
@@ -31,7 +40,8 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
     app.use('*', async (c, next) => {
         c.header('Cache-Control', 'no-store');
         if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
-            const trustedProxy = !!c.req.header('x-glab-booking-context') && !!(await bookingPrincipal(c)).userId;
+            const directSession = /\/session(?:\/|$)/.test(new URL(c.req.url).pathname);
+            const trustedProxy = !directSession && !!c.req.header('x-glab-booking-context') && !!(await bookingPrincipal(c)).userId;
             if (!trustedProxy && (c.req.header('origin') !== origin || c.req.header('sec-fetch-site') === 'cross-site'))
                 throw new MeetingError(403, '同じサイトから操作してください');
             if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json'))
@@ -51,16 +61,17 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
         }
         await next();
     });
+    app.use('*', scopedMeetings(db, sessions));
     app.onError((err, c) => {
         if (err instanceof MeetingError)
             return c.json({ error: err.message }, err.status);
         if (err instanceof SyntaxError)
             return c.json({ error: '入力形式が不正です' }, 400);
         console.error('[meetings] request failed', err.name);
-        return c.json({ error: '処理に失敗しました。再試行してください' }, 503);
+        return c.json({ error: '処理結果を確認できませんでした。再送前に現在の状態を確認してください' }, 503);
     });
     // publicUrl lets proxies such as GLab show the canonical share URL /meeting/{id}.
-    app.get('/config', c => c.json({ publicUrl: origin, googleClientId: config.googleClientId, discordEnabled: !!config.discordToken, cernereUrl: config.cernerePublicUrl }));
+    app.get('/config', c => c.json({ publicUrl: origin, googleClientId: config.googleClientId, discordEnabled: !!config.discordToken, cernereUrl: config.cernerePublicUrl, cernereClientId: config.cernereClientId ?? '' }));
     app.get('/facilities', async (c) => {
         if (!facilities)
             throw new MeetingError(503, '施設一覧が設定されていません');
@@ -70,9 +81,9 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
         const actor = (await ensureActor(db, c, await actorFor(db, c), secure));
         return c.json({ linked: !!actor.userId, notifications: actor.identities.some(i => i.notify === 1) });
     });
-    app.post('/session/login/start', c => c.json({ nonce: beginLogin(c, secure) }));
+    app.post('/session/login/start', c => c.json({ nonce: beginLogin(c, requireSessions()) }));
     app.post('/session/login/complete', async (c) => {
-        await completeLogin(c, config, object(await c.req.json()));
+        await completeLogin(c, requireSessions(), object(await c.req.json()));
         return c.json({ ok: true });
     });
     app.post('/session/link', async (c) => {
@@ -80,8 +91,8 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
         (await linkActor(db, c, actor, secure));
         return c.json({ ok: true });
     });
-    app.post('/session/logout', c => {
-        deleteCookie(c, 'cernere_token', { path: '/', secure, httpOnly: true, sameSite: 'Lax' });
+    app.post('/session/logout', async c => {
+        await logout(c, requireSessions());
         return c.json({ ok: true });
     });
     app.post('/session/notifications', async (c) => {
@@ -214,5 +225,5 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
         (await repo.deleteResponse(c.req.param('id'), c.req.param('responseId'), revision(body.revision), await actorFor(db, c)));
         return c.json({ ok: true });
     });
-    return app;
+    return Object.assign(app, { dispose: () => { sessions?.close(); composite?.dispose(); } });
 }

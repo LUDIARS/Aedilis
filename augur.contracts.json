@@ -36,6 +36,26 @@
       "module": "contracts/location-purpose.contract.ts",
       "mode": "observe",
       "sample": 1
+    },
+    {
+      "id": "C-5",
+      "criterion": "C-5 MeetingSessions.completeLogin(nonce,code,verifier): PKCEを一度交換し原期限内の自前sessionをbindする",
+      "symbol": "MeetingSessions.completeLogin",
+      "file": "server/meetings/scoped-sessions.ts",
+      "module": "server/contracts/meeting-login.contract.ts",
+      "mode": "observe",
+      "sample": 1
+    },
+    {
+      "id": "C-6",
+      "criterion": "C-6 MeetingSessions.run(id,operation,risk,authorize,execute): オンライン許可消費後に現在sessionと対象ACLを確認し一度だけ操作する",
+      "symbol": "MeetingSessions.run",
+      "file": "server/meetings/scoped-sessions.ts",
+      "module": "server/contracts/meeting-operation.contract.ts",
+      "mode": "observe",
+      "sample": 1
     }
-  ]
+  ],
+  "importFrom": "../lib/contract-observer.ts",
+  "runtimeFile": "server/lib/contract-runtime.ts"
 }
