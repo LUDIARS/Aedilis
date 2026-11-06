@@ -15,7 +15,9 @@ export async function actorFor(db: DatabaseInput, c: Context): Promise<Actor> {
     if (discord)
         return discord;
     const principal = await bookingPrincipal(c);
-    const auth = c.get('meetingAuth') ?? c.get('auth') ?? await readIdentity(c);
+    const direct = new URL(c.req.url).pathname.startsWith('/api/meetings') && !c.req.header('x-glab-booking-context');
+    // Generic auth belongs to managed Meet/verified proxy paths, never direct meetings.
+    const auth = direct ? c.get('meetingAuth') : c.get('meetingAuth') ?? c.get('auth') ?? await readIdentity(c);
     const userId = auth?.projectKey === 'aedilis' ? auth.userId : principal.source === 'glab' ? principal.userId : null;
     const identities = userId ? (await prepare(db, 'SELECT id, user_id, notify FROM meeting_identity WHERE user_id = ? ORDER BY created_at').all(userId)) as IdentityRow[] : [];
     const device = (await deviceIdentity(db, getCookie(c, COOKIE)));

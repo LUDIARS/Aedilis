@@ -7,6 +7,14 @@ export interface MeetingConfig {
   discordToken: string | null; notificationIntervalMs: number; notificationMaxAttempts: number;
   discordHandoffUrl?: string | null; discordHandoffGuildId?: string | null;
 }
+/** Pure startup validation; configuration readers need not hold login secrets.
+ * @implements SPEC-MEETING-SCOPED-LOGIN
+ */
+export function requireMeetingAuthConfig(config: MeetingConfig): void {
+  if (!config.cernereClientId?.trim() || !config.cernereClientSecret?.trim()) {
+    throw new Error('Meeting login requires CERNERE_PROJECT_CLIENT_ID and CERNERE_PROJECT_CLIENT_SECRET');
+  }
+}
 export function meetingConfig(publicUrl: string, cernereUrl: string): MeetingConfig {
   const handoffEnabled = process.env.AEDILIS_DISCORD_HANDOFF_ENABLED;
   if (handoffEnabled !== undefined && !['true', 'false'].includes(handoffEnabled)) throw new Error('AEDILIS_DISCORD_HANDOFF_ENABLED must be true or false');

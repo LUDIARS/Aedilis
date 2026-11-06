@@ -5,7 +5,7 @@ import { verifyBookingContext, type BookingPrincipal } from './context.ts';
 /** Only trusted server configuration chooses the key; caller headers cannot select a key or issuer. */
 export async function bookingPrincipal(c: Context): Promise<BookingPrincipal> {
   const isDirectMeeting = new URL(c.req.url).pathname.startsWith('/api/meetings') && !c.req.header('x-glab-booking-context');
-  const identity = isDirectMeeting ? c.get('meetingAuth') ?? await readIdentity(c) : c.get('auth') ?? await readIdentity(c);
+  const identity = isDirectMeeting ? c.get('meetingAuth') : c.get('auth') ?? await readIdentity(c);
   const userId = identity?.userId ?? null;
   const url = new URL(c.req.url);
   const body = ['GET', 'HEAD'].includes(c.req.method) ? '' : await c.req.text();

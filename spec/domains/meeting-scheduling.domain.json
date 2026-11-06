@@ -12,6 +12,7 @@
     { "pathPattern": "(^|/)test/meetings\\.test\\.ts$" },
     { "pathPattern": "(^|/)test/meeting-participation\\.test\\.ts$" },
     { "pathPattern": "(^|/)test/meeting-(?:scoped-[a-z]+|pkce-browser)\\.test\\.ts$" },
+    { "pathPattern": "(^|/)test/fixtures/meeting-authority\\.ts$" },
     { "pathPattern": "(^|/)server/contracts/meeting-[a-z]+\\.contract\\.ts$" },
     { "pathPattern": "(^|/)server/meet/[^/]+$" },
     { "pathPattern": "(^|/)test/(?:managed-meet|meet-[a-z0-9-]+)\\.test\\.ts$" },

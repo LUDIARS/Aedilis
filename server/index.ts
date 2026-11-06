@@ -24,7 +24,7 @@ import { makeReservationRouter } from './routes/reservations.ts';
 import { makeCheckinRouter } from './routes/checkin.ts';
 import { corpusManifest, CORPUS_MANIFEST_PATH } from './corpus.ts';
 import { createCernereProjectClient } from './lib/cernere-project-client.ts';
-import { meetingConfig } from './meetings/config.ts';
+import { meetingConfig, requireMeetingAuthConfig } from './meetings/config.ts';
 import { migrateMeetings } from './meetings/schema.ts';
 import { makeMeetingRouter } from './meetings/routes.ts';
 import { startMeetingOutbox } from './meetings/outbox.ts';
@@ -79,8 +79,9 @@ const ADMIN_IDS = new Set(
     .filter(Boolean),
 );
 
-const db = await openRuntimeDatabase(DB_PATH, process.env);
 const meetings = meetingConfig(AUDIENCE, CERNERE_BASE_URL);
+requireMeetingAuthConfig(meetings);
+const db = await openRuntimeDatabase(DB_PATH, process.env);
 migrateMeetings(db);
 migrateMeet(db);
 startAuth({

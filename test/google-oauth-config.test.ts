@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meetConfig } from '../server/meet/config.ts';
-import { meetingConfig } from '../server/meetings/config.ts';
+import { meetingConfig, requireMeetingAuthConfig } from '../server/meetings/config.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe('one shared operator-managed OAuth client', () => {
+  it('validates meeting login at startup without requiring secrets for unrelated configuration reads', () => {
+    vi.stubEnv('AEDILIS_DISCORD_ENABLED', 'false');
+    vi.stubEnv('AEDILIS_DISCORD_HANDOFF_ENABLED', 'false');
+    vi.stubEnv('CERNERE_PROJECT_CLIENT_ID', ''); vi.stubEnv('CERNERE_PROJECT_CLIENT_SECRET', '');
+    const config = meetingConfig('https://ae.example.com', 'https://cr.example.com');
+    expect(() => requireMeetingAuthConfig(config)).toThrow('CERNERE_PROJECT_CLIENT_ID');
+    expect(() => requireMeetingAuthConfig({ ...config, cernereClientId: 'ae-client', cernereClientSecret: ' ' })).toThrow();
+    expect(() => requireMeetingAuthConfig({ ...config, cernereClientId: 'ae-client', cernereClientSecret: 'fixture-only' })).not.toThrow();
+  });
   it('uses the same configured client for Calendar and Meet without exposing the secret to Calendar', () => {
     vi.stubEnv('AEDILIS_GOOGLE_CLIENT_ID', ' shared-client ');
     vi.stubEnv('AEDILIS_GOOGLE_CLIENT_SECRET', ' server-only-secret ');

@@ -15,6 +15,11 @@ export function scopedMeetings(db: DatabaseInput, sessions?: MeetingSessions): M
     const path = new URL(c.req.url).pathname.replace(/^\/api\/meetings/, '') || '/';
     c.set('meetingAuth', null);
     if (['/config', '/session/login/start', '/session/login/complete', '/session/logout'].includes(path)) { await next(); return; }
+    if (!c.req.header('x-glab-booking-context') && (c.req.header('authorization') !== undefined
+      || /(?:^|;\s*)cernere_token=/.test(c.req.header('cookie') ?? '') || c.get('auth'))) {
+      // Do not silently downgrade an obsolete authenticated request to a guest.
+      throw new MeetingError(401, '会議専用のログインをやり直してください');
+    }
     const id = getCookie(c, SESSION_COOKIE);
     if (!id) { await next(); return; } // Guest/Discord/signed GLAB retain their separate ACLs.
     if (c.req.header('x-glab-booking-context')) throw new MeetingError(403, '認証経路を混在させないでください');

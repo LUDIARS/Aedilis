@@ -31,7 +31,10 @@ Cr の grant/tombstone がリモートでの原子的 bind と再 bind 拒否を
 
 ## SPEC-MEETING-SCOPED-OPERATION
 
-直接 meetings の認証には旧 `cernere_token` と Bearer を使わない。認証 Cookie が提示された場合、
+直接 meetings の認証には旧 `cernere_token` と Bearer を使わない。旧資格情報または別用途の
+generic auth が提示された要求は401で明示拒否し、guestへ降格しない。generic readIdentityへの
+fallbackは行わない。資格情報なしの公開guest/device経路と、別用途のmanaged Meet認証は維持する。
+認証 Cookie が提示された場合、
 期限切れ・不明・オンライン照会不明はその要求を拒否し、guest として続行しない。
 guest device、meeting 単位の Discord respondent、検証済み GLAB assertion は従来の独立契約を維持する。
 自前 session と GLAB assertion の同時提示は拒否し、自前 session と Discord identity を混ぜない。
@@ -51,7 +54,8 @@ Cr permit 消費と Ae DB は分散 transaction ではなく、DB 結果不明�
 ## 設定・切替境界
 
 `CERNERE_PROJECT_CLIENT_ID` と `CERNERE_PROJECT_CLIENT_SECRET` は既存 Ex の標準注入を再利用し、
-欠落時は明示エラーとする。公開 `/config` は client_id のみ返し、secret/token を返さない。
+欠落時は起動境界の純粋な `requireMeetingAuthConfig` 検証で明示エラーとする。
+設定の読取自体は他モジュールのOAuth設定確認を妨げない。公開 `/config` は client_id のみ返し、secret/token を返さない。
 `AEDILIS_PUBLIC_URL` は登録 hub/origin、`AEDILIS_CERNERE_PUBLIC_URL` は popup の Cr origin と整合させる。
 管理者は Cr の Ae project に composite_origins、hub_url、上記全 action の service_operations と
 対応 consent を設定する。設定値・secret 実データにはこの作業で触れない。

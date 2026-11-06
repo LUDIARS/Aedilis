@@ -1,17 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { migrateMeetings } from '../server/meetings/schema.ts';
 import { makeMeetingRouter } from '../server/meetings/routes.ts';
 import { requireRegisteredOrganizer, requireResponder, resolveGuestResponses } from '../server/meetings/participation-policy.ts';
-import type { AuthIdentity } from '../server/auth.ts';
+import { SESSION_COOKIE } from '../server/meetings/cernere-login.ts';
+import { meetingAuthority } from './fixtures/meeting-authority.ts';
 import type { CernereProjectClient } from '../server/lib/cernere-project-client.ts';
 vi.mock('@hono/node-server/conninfo', () => ({ getConnInfo: () => ({ remote: { address: '127.0.0.1' } }) }));
-vi.mock('../server/auth.ts', () => ({
-    readIdentity: async (c: Context): Promise<AuthIdentity | null> => c.req.header('x-test-user') ? {
-        userId: c.req.header('x-test-user') || '', isAdmin: false, role: 'general', displayName: null, projectKey: 'aedilis',
-    } : null,
-}));
+const disposers: Array<() => void> = [];
+afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); });
 const origin = 'https://ae.example.com';
 const draft = { title: 'Guest policy', description: '', organizerName: 'Host', onlineAllowed: false,
     slots: [{ id: 'slot', startAt: '2026-10-01T01:00:00Z', endAt: '2026-10-01T02:00:00Z', venue: '' }], venues: [] };
@@ -23,16 +21,22 @@ function setup(): {
     const db = new Database(':memory:');
     migrateMeetings(db);
     const client = { request: async () => { throw new Error('Unexpected Cernere request'); } } as unknown as CernereProjectClient;
-    const app = new Hono().route('/api/meetings', makeMeetingRouter(db, {
+    const authority = meetingAuthority('cr-host'), sessions = new Map<string, ReturnType<typeof authority.login>>();
+    const router = makeMeetingRouter(db, {
         publicUrl: origin, cernereUrl: origin, cernerePublicUrl: '', googleClientId: '',
         discordToken: null, notificationIntervalMs: 1000, notificationMaxAttempts: 1,
-    }, client));
-    const call = (method: string, path: string, body?: unknown, user?: string, cookie?: string): Promise<Response> => {
+    }, client, undefined, authority.sessions);
+    disposers.push(() => router.dispose());
+    const app = new Hono().route('/api/meetings', router);
+    const call = async (method: string, path: string, body?: unknown, user?: string, cookie?: string): Promise<Response> => {
         const headers: Record<string, string> = { origin, 'content-type': 'application/json' };
-        if (user)
-            headers['x-test-user'] = user;
+        if (user) {
+            if (!sessions.has(user)) sessions.set(user, authority.login(user));
+            const session = await sessions.get(user)!;
+            headers.cookie = `${SESSION_COOKIE}=${session.id}`;
+        }
         if (cookie)
-            headers.cookie = cookie;
+            headers.cookie = [headers.cookie, cookie].filter(Boolean).join('; ');
         return Promise.resolve(app.request(origin + '/api/meetings' + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
     };
     return { db, call };

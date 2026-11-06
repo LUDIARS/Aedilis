@@ -68,12 +68,18 @@ it('does not hold the database transaction while remote authorization is pending
   } finally { releaseAuthorize(); router.dispose(); }
 });
 
-it('never turns a legacy Cr cookie or bearer into a direct meeting user, and preserves guest device identity', async () => {
+it('rejects legacy credentials explicitly and preserves credential-free guest device identity', async () => {
   const f = meetingAuthority(), router = makeMeetingRouter(db, config, client, undefined, f.sessions);
   const app = new Hono().route('/api/meetings', router);
   try {
-    const result = await app.request(origin + '/api/meetings/session', { method: 'POST',
-      headers: { ...headers('cernere_token=v4.public.legacy'), authorization: 'Bearer v4.public.legacy' }, body: '{}' });
+    for (const obsolete of [{ cookie: 'cernere_token=v4.public.legacy' }, { authorization: 'Bearer v4.public.legacy' }] as Record<string, string>[]) {
+      for (const path of ['/session', '/mine', '']) {
+        const result = await app.request(origin + '/api/meetings' + path, { method: path === '/mine' ? 'GET' : 'POST',
+          headers: { ...headers(), ...obsolete }, ...(path === '/mine' ? {} : { body: '{}' }) });
+        expect(result.status).toBe(401); expect(result.headers.get('set-cookie')).toBeNull();
+      }
+    }
+    const result = await app.request(origin + '/api/meetings/session', { method: 'POST', headers: headers(), body: '{}' });
     expect(result.status).toBe(200); expect(await result.json()).toMatchObject({ linked: false });
     expect(result.headers.get('set-cookie')).toContain('aedilis_meeting_device=');
     expect(f.call).not.toHaveBeenCalled();
