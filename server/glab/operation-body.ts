@@ -7,10 +7,11 @@ export class DelegatedBodyError extends Error {
 /** Bounded exact bytes, replayed once to the existing booking parser.
  * @implements SPEC-AE-GLAB-RESERVATION-DELEGATION-001
  */
-export async function captureOperationBody(c: Context): Promise<Uint8Array> {
+export async function captureOperationBody(c: Context, maximumBytes?: number): Promise<Uint8Array> {
   const request = c.req.raw;
-  const writesBody = ['POST', 'PATCH'].includes(request.method);
-  const maximum = writesBody ? 64 * 1024 : 0;
+  const maximum = maximumBytes ?? (['POST', 'PATCH'].includes(request.method) ? 64 * 1024 : 0);
+  if (!Number.isSafeInteger(maximum) || maximum < 0 || maximum > 64 * 1024) throw new Error('Invalid route-owned body limit');
+  const writesBody = maximum > 0;
   const declared = request.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new DelegatedBodyError(413);
   if (request.signal.aborted) throw new DelegatedBodyError(408);

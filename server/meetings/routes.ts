@@ -1,4 +1,3 @@
-import { filterAsync } from '../lib/async-collection.ts';
 import { prepare, transaction, type DatabaseInput } from '../persistence/database.ts';
 import { bookingPrincipal } from '../booking-access/request.ts';
 import { parseAudience, readAudience, saveAudience, canReadBooking } from '../booking-access/policy.ts';
@@ -150,7 +149,16 @@ export function makeMeetingRouter(db: DatabaseInput, config: MeetingConfig, clie
             id: string;
             owner_id: string;
         }[];
-        const items = (await Promise.all((await filterAsync((await filterAsync(rows, async (row) => owns(actor, row.owner_id) || !!(await prepare(db, 'SELECT 1 FROM booking_audience WHERE resource_type=? AND resource_id=?').get('meeting', row.id)))), async (row) => canReadBooking((await readAudience(db, 'meeting', row.id)), { userId: actor.userId, groups: actor.groups ?? [] }, owns(actor, row.owner_id)))).map(async (row) => (await repo.view(row.id, actor)))));
+        const items: unknown[] = [];
+        for (const row of rows) {
+            // Preserve the historic directory policy: records without an
+            // explicit audience are listed only for their owner.
+            if (!owns(actor, row.owner_id) && !await prepare(db, 'SELECT 1 FROM booking_audience WHERE resource_type=? AND resource_id=?').get('meeting', row.id)) continue;
+            if (!canReadBooking(await readAudience(db, 'meeting', row.id), { userId: actor.userId, groups: actor.groups ?? [] }, owns(actor, row.owner_id))) continue;
+            // view() opens a nested transaction. Concurrent SAVEPOINT lifetimes
+            // cannot overlap on the same pinned SQLite connection.
+            items.push(await repo.view(row.id, actor));
+        }
         return c.json({ items });
     });
     app.post('/', async (c) => {

@@ -5,7 +5,7 @@
   "templateRules": [],
   "membership": [
     { "pathPattern": "(^|/)server/glab/(?:.*/)?[^/]+$" },
-    { "pathPattern": "(^|/)test/glab-reservation-target\\.test\\.ts$" }
+    { "pathPattern": "(^|/)test/glab-(?:reservation|meeting)-target\\.test\\.ts$" }
   ],
-  "specRefs": ["spec/feature/glab-reservation-delegation.md"]
+  "specRefs": ["spec/feature/glab-reservation-delegation.md", "spec/feature/glab-meeting-delegation.md"]
 }

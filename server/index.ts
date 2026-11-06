@@ -33,6 +33,7 @@ import { migrateMeet } from './meet/schema.ts';
 import { managedMeetRoutes } from './meet/routes.ts';
 import { CernereComposite } from './vendor/cernere-composite/composite.js';
 import { GLAB_RESERVATION_PREFIX, makeGlabReservationTarget } from './glab/reservation-target.ts';
+import { GLAB_MEETING_PREFIX, makeGlabMeetingTarget } from './glab/meeting-target.ts';
 
 // Excubitor runs from the checkout root; compiled code lives under dist/server.
 const ROOT = resolve('.');
@@ -142,10 +143,13 @@ app.get('/api/health', async (c) => {
 app.get(CORPUS_MANIFEST_PATH, (c) => c.json(corpusManifest));
 
 app.route('/api/me', makeMeRouter(db));
-app.route(GLAB_RESERVATION_PREFIX, makeGlabReservationTarget(db, facilitySource, glabComposite.delegations, ADMIN_IDS));
 app.route('/api/meet', managedMeetRoutes(db, cernereProjectClient, meetConfig(AUDIENCE)));
 const meetingRouter = makeMeetingRouter(db, meetings, cernereProjectClient, facilitySource);
 app.route('/api/meetings', meetingRouter);
+// Specific namespace first: the reservation router deliberately rejects all
+// unclassified GLAB routes and must not intercept this router's operations.
+app.route(GLAB_MEETING_PREFIX, makeGlabMeetingTarget(db, meetingRouter, glabComposite.delegations, ADMIN_IDS));
+app.route(GLAB_RESERVATION_PREFIX, makeGlabReservationTarget(db, facilitySource, glabComposite.delegations, ADMIN_IDS));
 app.route('/api/facilities', makeFacilityRouter(db, facilitySource));
 app.route('/api/reservations', makeReservationRouter(db, facilitySource));
 // 出席チェックイン: /api/checkin/* と /api/admin/gateways をまとめて mount。

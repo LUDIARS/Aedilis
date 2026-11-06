@@ -10,6 +10,13 @@ import { discordRespondentActor } from './discord-respondent.ts';
 export { deviceIdentity } from './device-identity.ts';
 const COOKIE = 'aedilis_meeting_device';
 const LIFETIME = 180 * 86400;
+/** Linked identities only. Device/Discord ownership is a separate browser path.
+ * @implements SPEC-AE-GLAB-MEETING-DELEGATION-001
+ */
+export async function registeredActor(db: DatabaseInput, userId: string | null, groups: NonNullable<Actor['groups']>): Promise<Actor> {
+    const identities = userId ? (await prepare(db, 'SELECT id, user_id, notify FROM meeting_identity WHERE user_id = ? ORDER BY created_at').all(userId)) as IdentityRow[] : [];
+    return { identities, current: identities[0] ?? null, userId, groups };
+}
 export async function actorFor(db: DatabaseInput, c: Context): Promise<Actor> {
     const discord = c.get('meetingAuth') ? null : (await discordRespondentActor(db, c));
     if (discord)
@@ -19,7 +26,8 @@ export async function actorFor(db: DatabaseInput, c: Context): Promise<Actor> {
     // Generic auth belongs to managed Meet/verified proxy paths, never direct meetings.
     const auth = direct ? c.get('meetingAuth') : c.get('meetingAuth') ?? c.get('auth') ?? await readIdentity(c);
     const userId = auth?.projectKey === 'aedilis' ? auth.userId : principal.source === 'glab' ? principal.userId : null;
-    const identities = userId ? (await prepare(db, 'SELECT id, user_id, notify FROM meeting_identity WHERE user_id = ? ORDER BY created_at').all(userId)) as IdentityRow[] : [];
+    const registered = await registeredActor(db, userId, principal.groups);
+    const identities = registered.identities;
     const device = (await deviceIdentity(db, getCookie(c, COOKIE)));
     if (device && !device.user_id && !identities.some(i => i.id === device.id))
         identities.push(device);
