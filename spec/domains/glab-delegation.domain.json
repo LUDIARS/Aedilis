@@ -1,11 +1,11 @@
 {
   "name": "glab-delegation",
-  "description": "One-operation GLAB delegation into existing Aedilis facility/reservation ACLs.",
+  "description": "One-operation GLAB delegation into existing Aedilis facility, reservation, meeting and managed Meet ACLs.",
   "presetRules": [],
   "templateRules": [],
   "membership": [
     { "pathPattern": "(^|/)server/glab/(?:.*/)?[^/]+$" },
-    { "pathPattern": "(^|/)test/glab-(?:reservation|meeting)-target\\.test\\.ts$" }
+    { "pathPattern": "(^|/)test/glab-(?:reservation|meeting|managed-meet)-target\\.test\\.ts$" }
   ],
-  "specRefs": ["spec/feature/glab-reservation-delegation.md", "spec/feature/glab-meeting-delegation.md"]
+  "specRefs": ["spec/feature/glab-reservation-delegation.md", "spec/feature/glab-meeting-delegation.md", "spec/feature/glab-managed-meet-delegation.md"]
 }

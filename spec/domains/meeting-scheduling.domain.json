@@ -18,5 +18,5 @@
     { "pathPattern": "(^|/)test/(?:managed-meet|meet-[a-z0-9-]+)\\.test\\.ts$" },
     { "pathPattern": "(^|/)spec/feature/managed-google-meet\\.md$" }
   ],
-  "specRefs": ["spec/setup/meeting-integrations.md", "spec/feature/meeting-scoped-login.md"]
+  "specRefs": ["spec/setup/meeting-integrations.md", "spec/feature/meeting-scoped-login.md", "spec/feature/glab-managed-meet-delegation.md"]
 }

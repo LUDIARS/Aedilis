@@ -5,8 +5,11 @@ import { MeetApi } from './api.ts';
 import { organizerForMeeting } from './organizers.ts';
 import { ensureBookingAccessSchema } from '../booking-access/policy.ts';
 import { meetingSpace, type MeetRow, type MeetSpaceStore } from './space-store.ts';
+import type { MeetOperation } from './operation.ts';
 export type { MeetRow } from './space-store.ts';
 export interface EnsureOptions {
+    /** Per-request guard; shared OAuth refresh ownership never inherits this signal. */
+    operation?: MeetOperation;
     /**
      * `'optional'` is used for requests relayed by a trusted front end (GLab): the representative Google account hosts
      * the space alone when the creator has not linked Google. Ae's own page keeps `'required'`.
@@ -37,6 +40,7 @@ export class MeetProvisioner {
             throw new MeetingError(409, 'Meetを設定中です。少し待って再読込してください');
         this.active.add(store.key);
         try {
+            await options.operation?.assertCurrent();
             let row = await store.row();
             if (row && options.creatorOnly && row.creator_id !== creatorId)
                 throw new MeetingError(403, 'Meetを作成したCrアカウントで操作してください');
@@ -54,13 +58,20 @@ export class MeetProvisioner {
                     throw error;
                 })
                 : await this.tokens.email(creatorId);
+            await options.operation?.assertCurrent();
+            // Refresh ownership is per account and may be shared by requests.
+            // Never let one caller's abort cancel another caller's token rotation.
             const token = await this.tokens.access(organizerId);
+            await options.operation?.assertCurrent();
             const organizerEmail = await this.tokens.email(organizerId);
             if (!row) {
+                await options.operation?.assertCurrent();
                 await store.insert(organizerId, creatorId);
                 // Persist the intent before a non-idempotent request. A timeout must never create again.
                 try {
-                    const space = await this.api.create(token);
+                    const space = await this.api.create(token, options.operation);
+                    // A dispatched non-idempotent call may have completed before
+                    // disconnect. Retain its identity even when no new effect is allowed.
                     await store.created(space.name, space.meetingUri);
                 }
                 catch (error) {
@@ -72,7 +83,8 @@ export class MeetProvisioner {
             if (!row?.space_name)
                 throw new MeetingError(503, 'Meetの保存結果を確認できません');
             // Repeating configuration lists members first, recovering a lost create-member response.
-            await this.api.configure(token, row.space_name, !email || organizerEmail.toLowerCase() === email.toLowerCase() ? null : email);
+            await this.api.configure(token, row.space_name, !email || organizerEmail.toLowerCase() === email.toLowerCase() ? null : email, options.operation);
+            await options.operation?.assertCurrent();
             await store.status('ready');
             return this.view(await store.row());
         }

@@ -5,6 +5,8 @@ import { migrateMeet } from '../server/meet/schema.ts';
 import { MeetApi } from '../server/meet/api.ts';
 import { MeetTokens } from '../server/meet/tokens.ts';
 import { MeetProvisioner } from '../server/meet/provision.ts';
+import { MeetingError } from '../server/meetings/types.ts';
+import type { MeetOperation } from '../server/meet/operation.ts';
 async function fixture(send: typeof fetch) {
     const db = new Database(':memory:');
     migrateMeetings(db);
@@ -103,4 +105,50 @@ it('lets the representative account host alone when a GLab-relayed creator has n
     finally {
         db.close();
     }
+});
+it('retains a dispatched creation result on revocation, makes no further Google call and later resumes that same space', async () => {
+    let current = true;
+    const operation: MeetOperation = { signal: new AbortController().signal,
+        assertCurrent: async () => { if (!current) throw new MeetingError(403, 'Resource revoked'); } };
+    const send = vi.fn<typeof fetch>().mockImplementationOnce(async () => { current = false; return created(); })
+        .mockImplementation(async () => Response.json({ members: [] }));
+    const { db, provision } = await fixture(send);
+    try {
+        await expect(provision.ensure('poll', 'creator', { operation })).rejects.toThrow('revoked');
+        expect(send).toHaveBeenCalledTimes(1);
+        const row = db.prepare('SELECT space_name,status FROM meeting_meet WHERE meeting_id=?').get('poll');
+        expect(row).toEqual({ space_name: 'spaces/abc', status: 'configuring' });
+        expect(await provision.get('poll')).toEqual({ status: 'configuring' });
+        current = true;
+        expect((await provision.ensure('poll', 'creator', { operation })).status).toBe('ready');
+        expect(send.mock.calls.filter(call => String(call[0]).endsWith('/spaces'))).toHaveLength(1);
+    } finally { db.close(); }
+});
+it('rechecks resource rights after account lookup before persisting intent or dispatching creation', async () => {
+    let current = true;
+    const operation: MeetOperation = { signal: new AbortController().signal,
+        assertCurrent: async () => { if (!current) throw new MeetingError(403, 'Resource revoked'); } };
+    const send = vi.fn<typeof fetch>();
+    const { db, provision, tokens } = await fixture(send);
+    const email = tokens.email.bind(tokens);
+    vi.spyOn(tokens, 'email').mockImplementation(async userId => { const value = await email(userId); current = false; return value; });
+    try {
+        await expect(provision.ensure('poll', 'creator', { operation })).rejects.toThrow('revoked');
+        expect(send).not.toHaveBeenCalled(); expect(db.prepare('SELECT * FROM meeting_meet').all()).toEqual([]);
+    } finally { db.close(); }
+});
+it('passes request cancellation to Google without extending the existing transport timeout', async () => {
+    const controller = new AbortController();
+    const operation: MeetOperation = { signal: controller.signal, assertCurrent: async () => {} };
+    const send = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+        expect(init?.redirect).toBe('error'); expect(init?.signal?.aborted).toBe(false);
+        controller.abort(); expect(init?.signal?.aborted).toBe(true);
+        throw new Error('aborted');
+    });
+    const { db, provision } = await fixture(send);
+    try {
+        await expect(provision.ensure('poll', 'creator', { operation })).rejects.toThrow('Google');
+        expect(await provision.get('poll')).toEqual({ status: 'uncertain' });
+        expect(send).toHaveBeenCalledTimes(1);
+    } finally { db.close(); }
 });

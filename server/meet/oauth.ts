@@ -9,6 +9,7 @@ import { ORGANIZER_SCOPES, type MeetConfig, type RelaySource } from './config.ts
 import { googleJson } from './google-http.ts';
 import { MeetTokens, type TokenReply } from './tokens.ts';
 import { isAnyOrganizer, saveOrganizationOrganizer, saveSingletonOrganizer } from './organizers.ts';
+import type { MeetOperation } from './operation.ts';
 const COOKIE = 'aedilis_meet_oauth';
 /**
  * A front end such as GLab receives the Google redirect on its own origin and relays code+state with the same
@@ -59,13 +60,15 @@ export class MeetOAuth {
             throw new MeetingError(409, '代表アカウントは代表用のGoogle再認可を利用してください');
     }
     /** Shared by the Ae page flow and a trusted front end flow: checks, one-use state row and the Google URL. */
-    private async authorizationUrl(identity: AuthIdentity, target: MeetAuthorizationTarget, storedPath: string, redirectUri: string, groups: readonly BookingGroup[]): Promise<{ url: string; state: string }> {
+    private async authorizationUrl(identity: AuthIdentity, target: MeetAuthorizationTarget, storedPath: string, redirectUri: string, groups: readonly BookingGroup[], operation?: MeetOperation): Promise<{ url: string; state: string }> {
         if (!this.config.clientId || !this.config.clientSecret)
             throw new MeetingError(503, '管理者によるGoogle API設定が必要です');
         await this.requireAllowed(identity, target, groups);
         const organizer = target.mode === 'organizer';
         const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
+        await operation?.assertCurrent();
         (await prepare(this.db, 'DELETE FROM meet_oauth_state WHERE expires_at<? OR user_id=?').run(Date.now(), identity.userId));
+        await operation?.assertCurrent();
         (await prepare(this.db, 'INSERT INTO meet_oauth_state VALUES(?,?,?,?,?,?)').run(hash(state), identity.userId, encodeMode(target), verifier, Date.now() + 600000, storedPath));
         const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         url.search = new URLSearchParams({ client_id: this.config.clientId, redirect_uri: redirectUri, response_type: 'code', state, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url'), scope: (organizer ? ORGANIZER_SCOPES : ['openid', 'email']).join(' '), access_type: organizer ? 'offline' : 'online', prompt: organizer ? 'consent select_account' : 'select_account' }).toString();
@@ -83,9 +86,9 @@ export class MeetOAuth {
      * who authorizes an attacker's URL cannot complete it (state belongs to the attacker) and the attacker never sees
      * the code.
      */
-    async beginExternal(identity: AuthIdentity, target: MeetAuthorizationTarget, redirectUri: string, caller: RelayCaller): Promise<string> {
+    async beginExternal(identity: AuthIdentity, target: MeetAuthorizationTarget, redirectUri: string, caller: RelayCaller, operation?: MeetOperation): Promise<string> {
         const allowed = this.allowedExternal(caller.source, redirectUri);
-        return (await this.authorizationUrl(identity, target, `${EXTERNAL_PREFIX}${caller.source}:${allowed}`, allowed, caller.groups)).url;
+        return (await this.authorizationUrl(identity, target, `${EXTERNAL_PREFIX}${caller.source}:${allowed}`, allowed, caller.groups, operation)).url;
     }
     async complete(c: Context, identity: AuthIdentity): Promise<string> {
         const state = c.req.query('state') || '', cookie = getCookie(c, COOKIE) || '';
@@ -100,35 +103,38 @@ export class MeetOAuth {
         await this.bind(row, identity, c.req.query('code'), this.callback(), []);
         return row.return_path;
     }
-    async completeExternal(identity: AuthIdentity, state: unknown, code: unknown, caller: RelayCaller): Promise<MeetAuthorizationTarget> {
+    async completeExternal(identity: AuthIdentity, state: unknown, code: unknown, caller: RelayCaller, operation?: MeetOperation): Promise<MeetAuthorizationTarget> {
         if (typeof state !== 'string' || !validState(state))
             throw new MeetingError(403, 'Google認可をやり直してください');
+        await operation?.assertCurrent();
         const row = await this.takeState(state, identity);
         const sourcePrefix = `${EXTERNAL_PREFIX}${caller.source}:`;
         if (!row || !row.return_path.startsWith(sourcePrefix))
             throw new MeetingError(403, 'Google認可が失効しました');
         const redirectUri = this.allowedExternal(caller.source, row.return_path.slice(sourcePrefix.length));
-        await this.bind(row, identity, typeof code === 'string' ? code : undefined, redirectUri, caller.groups);
+        await this.bind(row, identity, typeof code === 'string' ? code : undefined, redirectUri, caller.groups, operation);
         return decodeMode(row.mode);
     }
     private async takeState(state: string, identity: AuthIdentity): Promise<StateRow | undefined> {
         return (await prepare(this.db, 'DELETE FROM meet_oauth_state WHERE state_hash=? AND user_id=? AND expires_at>? RETURNING *').get(hash(state), identity.userId, Date.now())) as StateRow | undefined;
     }
-    private async bind(row: StateRow, identity: AuthIdentity, code: string | undefined, redirectUri: string, groups: readonly BookingGroup[]): Promise<void> {
+    private async bind(row: StateRow, identity: AuthIdentity, code: string | undefined, redirectUri: string, groups: readonly BookingGroup[], operation?: MeetOperation): Promise<void> {
         const target = decodeMode(row.mode), organizer = target.mode === 'organizer';
         await this.requireAllowed(identity, target, groups, 'Google認可が失効しました');
         if (!code || code.length > 4096)
             throw new MeetingError(400, 'Google認可がキャンセルされました');
-        const reply = await googleJson<TokenReply>('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: row.verifier, client_id: this.config.clientId, client_secret: this.config.clientSecret, redirect_uri: redirectUri }) }, this.send);
+        await operation?.assertCurrent();
+        const reply = await googleJson<TokenReply>('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: row.verifier, client_id: this.config.clientId, client_secret: this.config.clientSecret, redirect_uri: redirectUri }), ...(operation ? { signal: operation.signal } : {}) }, this.send);
         if (!reply.access_token || !Number.isFinite(reply.expires_in) || reply.expires_in <= 0)
             throw new MeetingError(503, 'Googleの認可応答が不正です');
         // This binds a Google account to an already authenticated Cr user, never logs into Cr.
+        await operation?.assertCurrent();
         const user = await googleJson<{
             sub?: string;
             email?: string;
             email_verified?: boolean;
             hd?: string;
-        }>('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${reply.access_token}` } }, this.send);
+        }>('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${reply.access_token}` }, ...(operation ? { signal: operation.signal } : {}) }, this.send);
         if (!user.sub || !user.email || user.email_verified !== true)
             throw new MeetingError(403, '確認済みのGoogleメールアドレスが必要です');
         if (organizer && (!user.hd || ORGANIZER_SCOPES.filter(s => s.startsWith('https:')).some(s => !reply.scope?.split(' ').includes(s))))
@@ -141,7 +147,9 @@ export class MeetOAuth {
         const linked = (await prepare(this.db, 'SELECT 1 FROM meeting_meet WHERE creator_id=? OR organizer_id=? LIMIT 1').get(identity.userId, identity.userId));
         if (linked && old?.metadata?.subject !== user.sub)
             throw new MeetingError(409, '作成済みMeetに紐づくGoogleアカウントは変更できません');
+        await operation?.assertCurrent();
         await this.tokens.store(identity.userId, { accessToken: reply.access_token, refreshToken, expiresAt: new Date(Date.now() + reply.expires_in * 1000).toISOString(), tokenType: 'Bearer', scope: reply.scope || 'openid email', metadata: { subject: user.sub, email: user.email, emailVerified: true, meetOrganizer: organizer } });
+        await operation?.assertCurrent();
         if (target.organizationId)
             await saveOrganizationOrganizer(this.db, target.organizationId, identity.userId);
         else if (organizer)

@@ -17,6 +17,7 @@ import { organizationOrganizer, singletonOrganizer } from './organizers.ts';
 import { externalSpace } from './space-store.ts';
 const EXTERNAL_ID = /^[A-Za-z0-9_-]{1,100}$/;
 import type { MeetAuthorizationTarget, RelayCaller } from './oauth.ts';
+import { currentMeetOperation } from './operation.ts';
 /**
  * A GLab-signed booking context binds the authenticated Cr user to the exact method, path and body, so a relayed
  * request cannot be forged cross-site. Invalid assertions throw (403) instead of falling back to the origin check.
@@ -54,7 +55,11 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
             throw new MeetingError(403, '同じサイトから操作してください');
         await next();
     });
-    app.use('*', requireAuth);
+    app.use('*', async (c, next) => {
+        const operation = currentMeetOperation(c);
+        if (operation) { await operation.assertCurrent(); await next(); }
+        else return await requireAuth(c, next);
+    });
     app.use('*', async (c, next) => {
         if (getIdentity(c).projectKey !== 'aedilis')
             throw new MeetingError(403, 'Aeへログインしてください');
@@ -71,6 +76,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
                 const representative = await organizationOrganizer(db, group.id);
                 return { id: group.id, name: group.name, organizerConnected: !!representative, isOrganizer: representative === identity.userId };
             }));
+        await currentMeetOperation(c)?.assertCurrent();
         return c.json({ configured: !!config.clientId && !!config.clientSecret, isAdmin: identity.isAdmin, organizerConnected: !!organizer, isOrganizer: organizer === identity.userId, organizations, googleConnected: !!token?.metadata?.emailVerified, email: token?.metadata?.email || null });
     });
     app.post('/oauth/start', async (c) => {
@@ -80,7 +86,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
             // A relayed front end receives the Google redirect on its own callback; Ae's own page on Ae's.
             if (!relay || typeof input.redirectUri !== 'string')
                 throw new MeetingError(403, 'この戻り先からのGoogle認可は許可されていません');
-            return c.json({ url: await oauth.beginExternal(getIdentity(c), target, input.redirectUri, relay) });
+            return c.json({ url: await oauth.beginExternal(getIdentity(c), target, input.redirectUri, relay, currentMeetOperation(c)) });
         }
         return c.json({ url: (await oauth.begin(c, getIdentity(c), target.mode, typeof input.returnPath === 'string' ? input.returnPath : '')) });
     });
@@ -89,7 +95,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
         if (!relay)
             throw new MeetingError(403, 'GLabからの依頼を確認できません');
         const input = object(await c.req.json());
-        const target = await oauth.completeExternal(getIdentity(c), input.state, input.code, relay);
+        const target = await oauth.completeExternal(getIdentity(c), input.state, input.code, relay, currentMeetOperation(c));
         return c.json({ mode: target.mode, ...(target.organizationId ? { organizationId: target.organizationId } : {}) });
     });
     app.get('/oauth/callback', async (c) => {
@@ -123,6 +129,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
         return c.json(await provision.ensureSpace(store, getIdentity(c).userId, {
             creatorGoogle: 'optional',
             organizer: async () => (organizationId ? await organizationOrganizer(db, organizationId) : null) ?? singletonOrganizer(db),
+            operation: currentMeetOperation(c),
         }));
     });
     app.get('/:id', async (c) => {
@@ -138,7 +145,7 @@ export function managedMeetRoutes(db: DatabaseInput, client: CernereProjectClien
         repo.requireOwner(row, actor);
         if (!row.online_allowed || row.state === 'cancelled')
             throw new MeetingError(409, 'オンライン参加を有効にした会議で作成できます');
-        return c.json(await provision.ensure(row.id, identity.userId, { creatorGoogle: c.get('glabRelay') ? 'optional' : 'required' }));
+        return c.json(await provision.ensure(row.id, identity.userId, { creatorGoogle: c.get('glabRelay') ? 'optional' : 'required', operation: currentMeetOperation(c) }));
     });
     return app;
 }

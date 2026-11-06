@@ -10,7 +10,7 @@ export interface GlabOperation {
   requireBookingContext?: boolean;
   maximumBodyBytes?: number;
 }
-type Execution<T> = (c: Context, operation: T, next: Next, assertActive: () => void, body: Uint8Array) => Promise<void>;
+type Execution<T> = (c: Context, operation: T, next: Next, assertActive: () => void, body: Uint8Array, expiresAt: number) => Promise<void>;
 
 /** One standard SDK verification path, shared by the finite target routers.
  * @implements SPEC-AE-GLAB-RESERVATION-DELEGATION-001
@@ -50,7 +50,7 @@ export function glabRequestGate<T extends GlabOperation>(delegations: CompositeD
           c.set('auth', { userId: decision.user.id, role: decision.user.role, displayName: decision.user.displayName,
             projectKey: 'aedilis', isAdmin: adminIds.has(decision.user.id) });
           executing = true;
-          await execute(c, operation, next, () => assertActive(c), body);
+          await execute(c, operation, next, () => assertActive(c), body, Date.parse(decision.expiresAt));
         },
       });
     } catch (error) {

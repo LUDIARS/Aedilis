@@ -2,7 +2,9 @@ import { MeetingError } from '../meetings/types.ts';
 
 export async function googleJson<T>(url: string, init: RequestInit, send: typeof fetch = fetch): Promise<T> {
   let response: Response;
-  try { response = await send(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) }); }
+  const timeout = AbortSignal.timeout(15000);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  try { response = await send(url, { ...init, redirect: 'error', signal }); }
   catch { throw new MeetingError(503, 'Googleへの接続結果を確認できませんでした'); }
   if (!response.ok) {
     await response.body?.cancel();
